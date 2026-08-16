@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { env } from "../config/env.js";
 import { z } from "zod";
 import { GroqProvider } from "../llm/providers/groq.provider.js";
 import { GroqStructuredProvider } from "../llm/providers/groq-structured.provider.js";
@@ -79,6 +80,7 @@ export async function aiRoutes(app: FastifyInstance) {
     try {
       const service = new ToolCallingFinancialService(
         new GroqToolCallingProvider(),
+        new GroqProvider(env.GROQ_FINAL_MODEL),
       );
       return await service.answer(parsed.data.question);
     } catch (error) {

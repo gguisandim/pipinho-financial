@@ -120,3 +120,24 @@ O Ciclo 3 está concluído quando:
 4. julho produz `no_data` em vez de um valor inventado;
 5. banco/conta/investimentos são reconhecidos como capacidades ausentes;
 6. a telemetria mostra separadamente planejamento e resposta final.
+
+## Correção v0.3.2 — síntese final desacoplada
+
+Alguns modelos podem tentar emitir outra chamada de ferramenta mesmo quando `tool_choice: "none"` está efetivamente ativo. Como a Groq bloqueia essa tentativa, a API responde `400 tool_use_failed`.
+
+Para tornar o Ciclo 3 determinístico, a etapa final não reaproveita mais a conversa que contém `assistant.tool_calls` e mensagens `role=tool`. Após a única rodada de ferramentas, o serviço abre uma nova chamada de texto simples contendo apenas:
+
+1. a pergunta original;
+2. os nomes das ferramentas executadas;
+3. os argumentos usados;
+4. os resultados retornados pelo backend.
+
+Assim, planejamento e síntese ficam separados:
+
+```text
+ToolCallingProvider -> escolhe tools
+Backend             -> executa tools
+LlmProvider          -> sintetiza resposta sem tools
+```
+
+O loop multi-turno, em que o modelo pode solicitar novas ferramentas depois de observar resultados anteriores, continua reservado para o Ciclo 4.

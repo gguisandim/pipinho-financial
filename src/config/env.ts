@@ -7,6 +7,7 @@ const envSchema = z.object({
   GROQ_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
   GROQ_STRUCTURED_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
   GROQ_TOOL_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
+  GROQ_FINAL_MODEL: z.string().min(1).default("llama-3.3-70b-versatile"),
 });
 
 export const env = envSchema.parse(process.env);

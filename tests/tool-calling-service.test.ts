@@ -5,6 +5,11 @@ import type {
   ToolCallingRequest,
   ToolCallingTurnResponse,
 } from "../src/llm/tool-calling/tool-calling.types.js";
+import type {
+  LlmProvider,
+  LlmRequest,
+  LlmResponse,
+} from "../src/llm/providers/llm-provider.js";
 
 class FakeToolCallingProvider implements ToolCallingLlmProvider {
   readonly requests: ToolCallingRequest[] = [];
@@ -14,33 +19,37 @@ class FakeToolCallingProvider implements ToolCallingLlmProvider {
   ): Promise<ToolCallingTurnResponse> {
     this.requests.push(request);
 
-    if (this.requests.length === 1) {
-      return {
-        text: null,
-        toolCalls: [
-          {
-            id: "call_period",
-            type: "function",
-            function: {
-              name: "get_financial_period",
-              arguments: "{}",
-            },
+    return {
+      text: null,
+      toolCalls: [
+        {
+          id: "call_period",
+          type: "function",
+          function: {
+            name: "get_financial_period",
+            arguments: "{}",
           },
-        ],
-        finishReason: "tool_calls",
-        provider: "fake",
-        model: "fake-model",
-        latencyMs: 1,
-        usage: {},
-      };
-    }
+        },
+      ],
+      finishReason: "tool_calls",
+      provider: "fake-tools",
+      model: "fake-tool-model",
+      latencyMs: 1,
+      usage: {},
+    };
+  }
+}
+
+class FakeFinalProvider implements LlmProvider {
+  readonly requests: LlmRequest[] = [];
+
+  async complete(request: LlmRequest): Promise<LlmResponse> {
+    this.requests.push(request);
 
     return {
       text: "Dados disponíveis de 1 a 14 de agosto de 2026.",
-      toolCalls: [],
-      finishReason: "stop",
-      provider: "fake",
-      model: "fake-model",
+      provider: "fake-final",
+      model: "fake-final-model",
       latencyMs: 1,
       usage: {},
     };
@@ -48,20 +57,23 @@ class FakeToolCallingProvider implements ToolCallingLlmProvider {
 }
 
 describe("ToolCallingFinancialService", () => {
-  it("remove as tools no turno final do Ciclo 3", async () => {
-    const provider = new FakeToolCallingProvider();
-    const service = new ToolCallingFinancialService(provider);
+  it("faz uma rodada de tools e sintetiza em uma chamada limpa sem histórico de tool calling", async () => {
+    const toolProvider = new FakeToolCallingProvider();
+    const finalProvider = new FakeFinalProvider();
+    const service = new ToolCallingFinancialService(toolProvider, finalProvider);
 
     const result = await service.answer("Qual período financeiro está disponível?");
 
     expect(result.answer).toContain("1 a 14 de agosto");
-    expect(provider.requests).toHaveLength(2);
+    expect(toolProvider.requests).toHaveLength(1);
+    expect(finalProvider.requests).toHaveLength(1);
 
-    expect(provider.requests[0]?.tools?.length).toBeGreaterThan(0);
-    expect(provider.requests[0]?.toolChoice).toBe("auto");
+    expect(toolProvider.requests[0]?.tools?.length).toBeGreaterThan(0);
+    expect(toolProvider.requests[0]?.toolChoice).toBe("auto");
 
-    expect(provider.requests[1]?.tools).toBeUndefined();
-    expect(provider.requests[1]?.toolChoice).toBeUndefined();
-    expect(provider.requests[1]?.parallelToolCalls).toBeUndefined();
+    const finalRequest = finalProvider.requests[0];
+    expect(finalRequest?.user).toContain("get_financial_period");
+    expect(finalRequest?.user).toContain("2026-08-01");
+    expect(finalRequest?.system).toContain("NÃO possui ferramentas");
   });
 });

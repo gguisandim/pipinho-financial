@@ -3,6 +3,11 @@ import {
   financialToolDefinitions,
 } from "../financial-tools/financial-tools.js";
 import { FINANCIAL_TOOL_SYSTEM_PROMPT } from "../llm/prompts/financial-tools.prompt.js";
+import {
+  FINANCIAL_TOOL_SYNTHESIS_SYSTEM_PROMPT,
+  buildFinancialToolSynthesisPrompt,
+} from "../llm/prompts/financial-tool-synthesis.prompt.js";
+import type { LlmProvider } from "../llm/providers/llm-provider.js";
 import type {
   ToolCallingLlmProvider,
   ToolCallingMessage,
@@ -38,7 +43,10 @@ function sumUsage(
 }
 
 export class ToolCallingFinancialService {
-  constructor(private readonly llm: ToolCallingLlmProvider) {}
+  constructor(
+    private readonly llm: ToolCallingLlmProvider,
+    private readonly finalLlm: LlmProvider,
+  ) {}
 
   async answer(question: string) {
     const messages: ToolCallingMessage[] = [
@@ -112,24 +120,27 @@ export class ToolCallingFinancialService {
       });
     }
 
-    // Ciclo 3 propositalmente encerra após UMA rodada de ferramentas.
-    // No turno final NÃO enviamos a lista de tools. Isso segue o fluxo
-    // recomendado pela Groq para obter a resposta final após os resultados.
-    // Alguns modelos podem tentar chamar tools mesmo com tool_choice="none",
-    // o que faz a API responder 400 (tool_use_failed).
-    const finalTurn = await this.llm.completeWithTools({
-      messages,
+    // Ciclo 3 encerra após UMA rodada de ferramentas.
+    // A síntese final usa uma chamada NOVA e limpa, sem o histórico de
+    // assistant.tool_calls / role=tool. Isso evita que modelos GPT-OSS
+    // continuem tentando chamar ferramentas quando a API já está em
+    // tool_choice="none" (o padrão quando não há tools), cenário que a
+    // própria Groq documenta como possível em alguns modelos.
+    const finalTurn = await this.finalLlm.complete({
+      system: FINANCIAL_TOOL_SYNTHESIS_SYSTEM_PROMPT,
+      user: buildFinancialToolSynthesisPrompt(
+        question,
+        executedTools.map(({ name, arguments: args, result }) => ({
+          name,
+          arguments: args,
+          result,
+        })),
+      ),
     });
-
-    if (finalTurn.toolCalls.length > 0) {
-      throw new Error(
-        "O Ciclo 3 recebeu um tool_call inesperado no turno final sem ferramentas disponíveis.",
-      );
-    }
 
     return {
       question,
-      answer: finalTurn.text ?? "A Groq retornou uma resposta final vazia.",
+      answer: finalTurn.text || "A Groq retornou uma resposta final vazia.",
       toolCalls: executedTools,
       llm: {
         provider: finalTurn.provider,
@@ -142,7 +153,7 @@ export class ToolCallingFinancialService {
         final: {
           latencyMs: finalTurn.latencyMs,
           usage: finalTurn.usage,
-          finishReason: finalTurn.finishReason,
+          finishReason: null,
         },
         total: {
           latencyMs: planningTurn.latencyMs + finalTurn.latencyMs,

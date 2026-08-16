@@ -1,3 +1,5 @@
+import { env } from "../config/env.js";
+import { GroqProvider } from "../llm/providers/groq.provider.js";
 import { GroqToolCallingProvider } from "../llm/tool-calling/groq-tool-calling.provider.js";
 import { ToolCallingFinancialService } from "../services/tool-calling-financial.service.js";
 
@@ -5,7 +7,10 @@ const question =
   process.argv.slice(2).join(" ") ||
   "Analise meu fluxo financeiro e destaque os três pontos mais relevantes.";
 
-const service = new ToolCallingFinancialService(new GroqToolCallingProvider());
+const service = new ToolCallingFinancialService(
+  new GroqToolCallingProvider(),
+  new GroqProvider(env.GROQ_FINAL_MODEL),
+);
 const result = await service.answer(question);
 
 console.log("=== CICLO 3: LOCAL TOOL CALLING ===");

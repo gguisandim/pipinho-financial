@@ -5,7 +5,7 @@ import type { LlmProvider, LlmRequest, LlmResponse } from "./llm-provider.js";
 export class GroqProvider implements LlmProvider {
   private readonly client: Groq;
 
-  constructor() {
+  constructor(private readonly model: string = env.GROQ_MODEL) {
     this.client = new Groq({ apiKey: requireGroqApiKey() });
   }
 
@@ -13,7 +13,7 @@ export class GroqProvider implements LlmProvider {
     const startedAt = performance.now();
 
     const completion = await this.client.chat.completions.create({
-      model: env.GROQ_MODEL,
+      model: this.model,
       temperature: 0.2,
       messages: [
         { role: "system", content: request.system },
@@ -27,7 +27,7 @@ export class GroqProvider implements LlmProvider {
     return {
       text,
       provider: "groq",
-      model: completion.model ?? env.GROQ_MODEL,
+      model: completion.model ?? this.model,
       latencyMs,
       usage: {
         promptTokens: completion.usage?.prompt_tokens,
