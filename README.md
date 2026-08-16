@@ -389,3 +389,14 @@ Tokens
 ```
 
 Veja `docs/CICLO_5B.md`.
+
+
+## Ciclo 6.1 — Pluggy authentication
+
+Autenticação server-side com `POST https://api.pluggy.ai/auth`, cache temporário da API Key e proteção para não expor credenciais.
+
+```bash
+npm run cycle6:1
+```
+
+Veja `docs/CICLO_6_1.md`.

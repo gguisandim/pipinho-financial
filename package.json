@@ -1,6 +1,6 @@
 {
   "name": "finance-llm-lab",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,9 @@
     "benchmark": "tsx src/scripts/cycle5a.ts",
     "cycle5b": "tsx src/scripts/cycle5b.ts",
     "benchmark:compare": "tsx src/scripts/cycle5b.ts",
-    "providers:check": "tsx src/scripts/providers.ts"
+    "providers:check": "tsx src/scripts/providers.ts",
+    "cycle6:1": "tsx src/scripts/cycle6-1.ts",
+    "pluggy:check": "tsx src/scripts/cycle6-1.ts"
   },
   "dependencies": {
     "dotenv": "latest",
