@@ -10,6 +10,7 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 3:** Local Tool Calling: o LLM escolhe funções financeiras e a aplicação executa uma rodada controlada.
 - **Ciclo 4:** Agent Loop multi-turno: o modelo pode usar resultados e erros de tools como feedback, corrigir a estratégia e iterar sob limites explícitos.
 - **Ciclo 5A:** evaluation harness determinístico para medir tools, argumentos, grounding, latência e tokens.
+- **Ciclo 5B:** abstração multi-provider e comparação Groq × Ollama × OpenRouter.
 
 Princípio arquitetural:
 
@@ -49,8 +50,8 @@ GROQ_STRUCTURED_MODEL=openai/gpt-oss-20b
 GROQ_TOOL_MODEL=openai/gpt-oss-20b
 GROQ_FINAL_MODEL=openai/gpt-oss-20b
 GROQ_AGENT_MODEL=openai/gpt-oss-20b
-GROQ_AGENT_MAX_ITERATIONS=5
-GROQ_AGENT_MAX_TOOL_CALLS=12
+AGENT_MAX_ITERATIONS=5
+AGENT_MAX_TOOL_CALLS=12
 ```
 
 Nunca versione `.env`.
@@ -271,8 +272,8 @@ Configuração principal:
 
 ```env
 GROQ_AGENT_MODEL=openai/gpt-oss-20b
-GROQ_AGENT_MAX_ITERATIONS=5
-GROQ_AGENT_MAX_TOOL_CALLS=12
+AGENT_MAX_ITERATIONS=5
+AGENT_MAX_TOOL_CALLS=12
 ```
 
 Veja `docs/CICLO_4.md`.
@@ -322,3 +323,69 @@ npm run benchmark
 ```
 
 Para testes rápidos de um caso, use `--case`. O `--delay-ms` pode ser reduzido manualmente, mas valores muito baixos podem atingir o limite gratuito do provider.
+
+## v0.6.1 — Ciclo 5B cloud-only + robustez de tool calling
+
+O Ciclo 5B agora compara somente providers compatíveis com o alvo de deploy web:
+
+```bash
+npm run benchmark -- --provider groq
+npm run benchmark -- --provider openrouter
+npm run benchmark:compare -- --providers groq,openrouter
+```
+
+Ollama foi removido do escopo principal. A abstração `LlmProvider`/`ToolCallingLlmProvider` permanece, mas o benchmark agora representa o cenário que poderá ser usado em Vercel: inferência remota via API.
+
+### Correções da v0.6.1
+
+1. **Groq `tool_use_failed` malformado:** `failed_generation` agora possui recuperação tolerante. O caso observado `{"name":"get_financial_period","arguments":{"{}"}}` é normalizado para uma chamada sem argumentos, sem derrubar o processo.
+2. **`no_data` autocontido:** consultas sem dados devolvem `availablePeriod`; o agente não precisa chamar `get_financial_period` novamente quando a cobertura temporal já estiver presente.
+3. **Falhas externas separadas de qualidade:** rate limit, rede e indisponibilidade do provider não zeram mais tool/argument/grounding accuracy. O relatório separa `provider availability`, `provider errors`, `model protocol errors` e `harness errors`.
+4. **OpenRouter sem stack trace:** se `OPENROUTER_API_KEY` estiver ausente, o CLI informa a configuração necessária e encerra sem iniciar benchmark.
+5. **Evaluator semântico/numérico:** formatos monetários e frases semanticamente equivalentes continuam sendo normalizados antes do scoring.
+
+### OpenRouter
+
+A API do OpenRouter exige API key mesmo para modelos gratuitos. Configure:
+
+```env
+OPENROUTER_API_KEY=sua_chave
+OPENROUTER_AGENT_MODEL=openrouter/free
+OPENROUTER_FINAL_MODEL=openrouter/free
+```
+
+Verifique os providers antes do benchmark:
+
+```bash
+npm run providers:check
+```
+
+Depois:
+
+```bash
+npm run benchmark -- --provider openrouter --case cash-flow-general
+npm run benchmark:compare -- --providers groq,openrouter --case cash-flow-general
+```
+
+`openrouter/free` pode selecionar modelos diferentes entre chamadas. O relatório registra `observedModels`; para uma comparação científica por modelo, configure depois um ID fixo compatível com tools.
+
+### Métricas do benchmark
+
+Qualidade e disponibilidade agora são dimensões separadas:
+
+```text
+Provider availability
+Pass rate
+Tool selection accuracy
+Argument accuracy
+Grounding accuracy
+Semantic answer accuracy
+Numeric answer accuracy
+Model protocol errors
+Provider errors
+Harness errors
+Latency
+Tokens
+```
+
+Veja `docs/CICLO_5B.md`.

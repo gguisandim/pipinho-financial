@@ -36,3 +36,21 @@ describe("financial queries para tools", () => {
     expect(result.unavailableInCurrentDataset).toContain("investments");
   });
 });
+
+describe("no_data com cobertura temporal", () => {
+  it("inclui availablePeriod para evitar uma segunda tool desnecessária", () => {
+    const result = queryCashFlow(syntheticTransactions, {
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+    });
+
+    expect(result.status).toBe("no_data");
+    if (result.status === "no_data") {
+      expect(result.availablePeriod).toMatchObject({
+        status: "ok",
+        start: "2026-08-01",
+        end: "2026-08-14",
+      });
+    }
+  });
+});

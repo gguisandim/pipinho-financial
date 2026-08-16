@@ -57,12 +57,96 @@ interface GroqToolUseErrorShape {
 }
 
 /**
- * A Groq pode validar uma tool call antes de devolvê-la normalmente. Em caso
- * de tool_use_failed, o payload costuma trazer failed_generation com a chamada
- * que o modelo tentou produzir. Recuperamos essa intenção para que a nossa
- * camada local (Zod + guards semânticos) possa rejeitar/corrigir a chamada no
- * loop, em vez de derrubar o processo inteiro.
+ * A Groq pode rejeitar uma geração de tool call antes de devolvê-la ao
+ * cliente. `failed_generation` nem sempre é JSON válido — por exemplo, o
+ * modelo pode gerar `"arguments": {"{}"}` para uma função sem argumentos.
+ *
+ * Tentamos duas camadas de recuperação:
+ * 1. JSON.parse normal, quando o payload é válido;
+ * 2. extração conservadora do nome e dos argumentos quando o envelope veio
+ *    malformado. Só convertemos explicitamente representações inequívocas de
+ *    "sem argumentos" para `{}`. Qualquer outro argumento malformado é enviado
+ *    como um objeto sentinela para que Zod/guards locais o rejeitem e o agent
+ *    loop tenha a oportunidade de tentar novamente, em vez de executar uma
+ *    chamada potencialmente diferente da intenção original.
  */
+function recoverMalformedToolIntent(raw: string): {
+  name: string;
+  arguments: string;
+} | null {
+  const nameMatch = raw.match(/["']name["']\s*:\s*["']([^"']+)["']/i);
+  const name = nameMatch?.[1]?.trim();
+  if (!name) return null;
+
+  const argumentsIndex = raw.search(/["']arguments["']\s*:/i);
+  if (argumentsIndex < 0) {
+    return { name, arguments: "{}" };
+  }
+
+  const afterKey = raw
+    .slice(argumentsIndex)
+    .replace(/^[\s\S]*?["']arguments["']\s*:\s*/i, "")
+    .trim();
+
+  // Formas observadas de uma tool sem argumentos:
+  // {}, "{}", {"{}"}, { '{}'}, seguidas ou não do fechamento do envelope.
+  if (
+    /^\{\s*\}\s*\}?\s*$/.test(afterKey) ||
+    /^["']\{\}["']\s*\}?\s*$/.test(afterKey) ||
+    /^\{\s*["']\{\}["']\s*\}\s*["']?\s*\}?\s*$/.test(afterKey) ||
+    /^null\s*\}?\s*$/.test(afterKey)
+  ) {
+    return { name, arguments: "{}" };
+  }
+
+  // Procura o primeiro objeto JSON balanceado após `arguments:`. Isso recupera
+  // casos em que apenas o fechamento do envelope externo ficou corrompido.
+  const objectStart = afterKey.indexOf("{");
+  if (objectStart >= 0) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = objectStart; index < afterKey.length; index += 1) {
+      const char = afterKey[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+      if (char === "{") depth += 1;
+      if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          const candidate = afterKey.slice(objectStart, index + 1);
+          try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+              return { name, arguments: JSON.stringify(parsed) };
+            }
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Nunca transformamos argumentos ambíguos em `{}` porque isso poderia mudar
+  // o significado da consulta (ex.: perder datas de julho). O sentinela é
+  // propositalmente incompatível com os schemas strict das financial tools.
+  return {
+    name,
+    arguments: JSON.stringify({
+      __malformed_provider_arguments__: raw.slice(0, 500),
+    }),
+  };
+}
+
 export function recoverToolCallFromGroqError(
   error: unknown,
 ): NormalizedToolCall | null {
@@ -77,8 +161,10 @@ export function recoverToolCallFromGroqError(
     return null;
   }
 
+  const raw = providerError.failed_generation;
+
   try {
-    const parsed = JSON.parse(providerError.failed_generation) as {
+    const parsed = JSON.parse(raw) as {
       name?: unknown;
       arguments?: unknown;
     };
@@ -97,7 +183,14 @@ export function recoverToolCallFromGroqError(
       },
     };
   } catch {
-    return null;
+    const recovered = recoverMalformedToolIntent(raw);
+    if (!recovered) return null;
+
+    return {
+      id: `recovered_${randomUUID()}`,
+      type: "function",
+      function: recovered,
+    };
   }
 }
 

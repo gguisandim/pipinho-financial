@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   BenchmarkCaseResult,
+  BenchmarkProviderId,
   BenchmarkReport,
   BenchmarkSummary,
 } from "./benchmark.types.js";
@@ -28,98 +29,166 @@ function percentile(values: number[], percentileValue: number): number {
 }
 
 export function summarizeBenchmark(options: {
-  model: string;
+  provider: BenchmarkProviderId;
+  configuredModel: string;
   referenceDate: string;
   runs: number;
   caseCount: number;
   results: BenchmarkCaseResult[];
 }): BenchmarkSummary {
   const { results } = options;
-  const tokenValues = results.map((result) => result.tokens ?? 0);
+  const completed = results.filter((result) => result.executionStatus === "completed");
+  const protocolErrors = results.filter(
+    (result) => result.executionStatus === "model_protocol_error",
+  );
+  const providerErrors = results.filter((result) => result.executionStatus === "provider_error");
+  const harnessErrors = results.filter((result) => result.executionStatus === "harness_error");
+  const qualityResults = [...completed, ...protocolErrors];
+
+  const tokenValues = completed.flatMap((result) =>
+    result.tokens === null ? [] : [result.tokens],
+  );
+  const latencyValues = completed.flatMap((result) =>
+    result.latencyMs > 0 ? [result.latencyMs] : [],
+  );
+  const observedModels = [
+    ...new Set(results.flatMap((result) => result.models).filter(Boolean)),
+  ];
+  const passed = qualityResults.filter((result) => result.score.passed).length;
+  const qualityCount = qualityResults.length;
 
   return {
-    model: options.model,
+    provider: options.provider,
+    configuredModel: options.configuredModel,
+    observedModels,
     referenceDate: options.referenceDate,
     runs: options.runs,
     caseCount: options.caseCount,
     executionCount: results.length,
-    passed: results.filter((result) => result.score.passed).length,
-    passRatePct: round(
-      (results.filter((result) => result.score.passed).length / results.length) * 100,
+    completedExecutions: completed.length,
+    modelProtocolErrors: protocolErrors.length,
+    providerErrors: providerErrors.length,
+    harnessErrors: harnessErrors.length,
+    qualityExecutionCount: qualityCount,
+    providerAvailabilityPct: round(
+      results.length ? ((results.length - providerErrors.length) / results.length) * 100 : 0,
     ),
+    passed,
+    passRatePct: round(qualityCount ? (passed / qualityCount) * 100 : 0),
     toolSelectionAccuracyPct: round(
-      average(results.map((result) => result.score.toolSelection)) * 100,
+      average(qualityResults.map((result) => result.score.toolSelection)) * 100,
     ),
     argumentAccuracyPct: round(
-      average(results.map((result) => result.score.argumentAccuracy)) * 100,
+      average(qualityResults.map((result) => result.score.argumentAccuracy)) * 100,
     ),
     groundingAccuracyPct: round(
-      average(results.map((result) => result.score.grounding)) * 100,
+      average(qualityResults.map((result) => result.score.grounding)) * 100,
     ),
     causalRepairRatePct: round(
-      (results.filter((result) => result.causalGrounding.repaired).length / results.length) * 100,
+      completed.length
+        ? (completed.filter((result) => result.causalGrounding.repaired).length /
+            completed.length) *
+            100
+        : 0,
+    ),
+    semanticAnswerAccuracyPct: round(
+      average(qualityResults.map((result) => result.score.semanticAnswer)) * 100,
+    ),
+    numericAnswerAccuracyPct: round(
+      average(qualityResults.map((result) => result.score.numericAnswer)) * 100,
     ),
     answerRequirementAccuracyPct: round(
-      average(results.map((result) => result.score.answerRequirements)) * 100,
+      average(qualityResults.map((result) => result.score.answerRequirements)) * 100,
     ),
-    averageIterations: round(average(results.map((result) => result.iterations))),
-    averageToolCalls: round(average(results.map((result) => result.toolCalls.length))),
-    averageLatencyMs: round(average(results.map((result) => result.latencyMs))),
-    p50LatencyMs: percentile(results.map((result) => result.latencyMs), 0.5),
-    p95LatencyMs: percentile(results.map((result) => result.latencyMs), 0.95),
-    averageTokens: round(average(tokenValues)),
-    totalTokens: tokenValues.reduce((sum, value) => sum + value, 0),
+    averageIterations: round(average(completed.map((result) => result.iterations))),
+    averageToolCalls: round(average(completed.map((result) => result.toolCalls.length))),
+    averageLatencyMs: round(average(latencyValues)),
+    p50LatencyMs: percentile(latencyValues, 0.5),
+    p95LatencyMs: percentile(latencyValues, 0.95),
+    tokenCoveragePct: round(
+      completed.length ? (tokenValues.length / completed.length) * 100 : 0,
+    ),
+    averageTokens: tokenValues.length ? round(average(tokenValues)) : null,
+    totalTokens: tokenValues.length
+      ? tokenValues.reduce((sum, value) => sum + value, 0)
+      : null,
   };
+}
+
+function statusLabel(result: BenchmarkCaseResult): string {
+  if (result.executionStatus === "provider_error") return "⚠ provider";
+  if (result.executionStatus === "model_protocol_error") return "⚠ protocol";
+  if (result.executionStatus === "harness_error") return "⚠ harness";
+  return result.score.passed ? "✅" : "❌";
 }
 
 function markdown(report: BenchmarkReport): string {
   const { summary } = report;
   const lines = [
-    "# Finance LLM Lab — Benchmark Ciclo 5A",
+    "# Finance LLM Lab — Benchmark Ciclo 5",
     "",
     `Gerado em: ${report.generatedAt}`,
-    `Modelo: \`${summary.model}\``,
+    `Provider: \`${summary.provider}\``,
+    `Modelo configurado: \`${summary.configuredModel}\``,
+    `Modelos observados: ${summary.observedModels.map((model) => `\`${model}\``).join(", ") || "—"}`,
     `Data de referência: \`${summary.referenceDate}\``,
     "",
     "## Resumo",
     "",
+    "As métricas de qualidade usam apenas execuções avaliáveis: respostas completas e falhas de protocolo do modelo. Falhas externas de provider e falhas internas do harness são reportadas separadamente.",
+    "",
     "| Métrica | Resultado |",
     "|---|---:|",
+    `| Execuções solicitadas | ${summary.executionCount} |`,
+    `| Execuções completas | ${summary.completedExecutions} |`,
+    `| Falhas de protocolo do modelo | ${summary.modelProtocolErrors} |`,
+    `| Falhas do provider | ${summary.providerErrors} |`,
+    `| Falhas do harness | ${summary.harnessErrors} |`,
+    `| Disponibilidade do provider | ${summary.providerAvailabilityPct}% |`,
+    `| Execuções avaliáveis | ${summary.qualityExecutionCount} |`,
     `| Pass rate | ${summary.passRatePct}% |`,
     `| Tool selection accuracy | ${summary.toolSelectionAccuracyPct}% |`,
     `| Argument accuracy | ${summary.argumentAccuracyPct}% |`,
     `| Grounding accuracy | ${summary.groundingAccuracyPct}% |`,
     `| Causal repair rate | ${summary.causalRepairRatePct}% |`,
+    `| Semantic answer accuracy | ${summary.semanticAnswerAccuracyPct}% |`,
+    `| Numeric answer accuracy | ${summary.numericAnswerAccuracyPct}% |`,
     `| Answer requirements | ${summary.answerRequirementAccuracyPct}% |`,
     `| Iterações médias | ${summary.averageIterations} |`,
     `| Tools médias | ${summary.averageToolCalls} |`,
     `| Latência média | ${summary.averageLatencyMs} ms |`,
     `| P50 | ${summary.p50LatencyMs} ms |`,
     `| P95 | ${summary.p95LatencyMs} ms |`,
-    `| Tokens médios | ${summary.averageTokens} |`,
-    `| Tokens totais | ${summary.totalTokens} |`,
+    `| Cobertura de tokens | ${summary.tokenCoveragePct}% |`,
+    `| Tokens médios | ${summary.averageTokens ?? "—"} |`,
+    `| Tokens totais | ${summary.totalTokens ?? "—"} |`,
     "",
     "## Casos",
     "",
-    "| Caso | Passou | Tools | Args | Grounding | Resposta | Latência | Tokens |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|",
+    "| Caso | Status | Tools | Args | Grounding | Semântico | Numérico | Latência | Tokens |",
+    "|---|---|---:|---:|---:|---:|---:|---:|---:|",
   ];
 
   for (const result of report.results) {
     lines.push(
-      `| ${result.caseId}#${result.run} | ${result.score.passed ? "✅" : "❌"} | ${Math.round(result.score.toolSelection * 100)}% | ${Math.round(result.score.argumentAccuracy * 100)}% | ${Math.round(result.score.grounding * 100)}% | ${Math.round(result.score.answerRequirements * 100)}% | ${result.latencyMs} ms | ${result.tokens ?? 0} |`,
+      `| ${result.caseId}#${result.run} | ${statusLabel(result)} | ${Math.round(result.score.toolSelection * 100)}% | ${Math.round(result.score.argumentAccuracy * 100)}% | ${Math.round(result.score.grounding * 100)}% | ${Math.round(result.score.semanticAnswer * 100)}% | ${Math.round(result.score.numericAnswer * 100)}% | ${result.latencyMs || "—"} | ${result.tokens ?? "—"} |`,
     );
   }
 
-  lines.push("", "## Falhas", "");
-  const failed = report.results.filter((result) => !result.score.passed);
-  if (failed.length === 0) {
+  lines.push("", "## Falhas e avisos", "");
+  const problematic = report.results.filter(
+    (result) => result.executionStatus !== "completed" || !result.score.passed,
+  );
+  if (problematic.length === 0) {
     lines.push("Nenhuma falha nos critérios determinísticos desta execução.");
   } else {
-    for (const result of failed) {
+    for (const result of problematic) {
       lines.push(`### ${result.caseId}#${result.run}`, "");
+      lines.push(`Status: \`${result.executionStatus}\``, "");
+      lines.push(`Modelo observado: \`${result.model}\``, "");
+      if (result.error) lines.push(`Erro: ${result.error}`, "");
       for (const failure of result.score.failures) lines.push(`- ${failure}`);
-      lines.push("", "Resposta:", "", result.answer, "");
+      if (result.answer) lines.push("", "Resposta:", "", result.answer, "");
     }
   }
 
@@ -127,7 +196,7 @@ function markdown(report: BenchmarkReport): string {
 }
 
 export async function writeBenchmarkReport(report: BenchmarkReport) {
-  const directory = path.resolve("reports");
+  const directory = path.resolve("reports", report.summary.provider);
   await mkdir(directory, { recursive: true });
   const stamp = report.generatedAt.replace(/[:.]/g, "-");
   const jsonPath = path.join(directory, `benchmark-${stamp}.json`);

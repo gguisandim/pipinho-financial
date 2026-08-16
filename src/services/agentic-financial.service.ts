@@ -63,8 +63,8 @@ export class AgenticFinancialService {
   ) {}
 
   async answer(question: string) {
-    const maxIterations = this.options.maxIterations ?? env.GROQ_AGENT_MAX_ITERATIONS;
-    const maxToolCalls = this.options.maxToolCalls ?? env.GROQ_AGENT_MAX_TOOL_CALLS;
+    const maxIterations = this.options.maxIterations ?? env.AGENT_MAX_ITERATIONS;
+    const maxToolCalls = this.options.maxToolCalls ?? env.AGENT_MAX_TOOL_CALLS;
     const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
 
     const messages: ToolCallingMessage[] = [
@@ -259,7 +259,7 @@ export class AgenticFinancialService {
           },
         },
         llm: {
-          agentModel: turns.at(-1)?.model ?? env.GROQ_AGENT_MODEL,
+          agentModel: turns.at(-1)?.model ?? "unknown",
           fallback: {
             model: fallback.model,
             latencyMs: fallback.latencyMs,
@@ -291,7 +291,7 @@ export class AgenticFinancialService {
         },
       },
       llm: {
-        agentModel: turns.at(-1)?.model ?? env.GROQ_AGENT_MODEL,
+        agentModel: turns.at(-1)?.model ?? "unknown",
         fallback: null,
         groundingRepair,
         total: {

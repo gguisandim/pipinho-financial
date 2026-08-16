@@ -7,7 +7,7 @@ const app = Fastify({ logger: true });
 
 app.get("/", async () => ({
   name: "finance-llm-lab",
-  version: "0.4.0",
+  version: "0.6.1",
   status: "running",
   cycles: {
     cycle0: "Financial Engine determinístico",
@@ -15,6 +15,7 @@ app.get("/", async () => ({
     cycle2: "Structured Outputs + Zod",
     cycle3: "Local Tool Calling + execução financeira controlada",
     cycle4: "Agent Loop multi-turno + guardrails + limites operacionais",
+    cycle5: "Evaluation Harness + cloud multi-provider benchmark",
   },
   endpoints: {
     health: "GET /health",

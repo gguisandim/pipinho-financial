@@ -12,7 +12,7 @@ const julyTool: AgentToolTrace = {
 };
 
 describe("benchmark scoring", () => {
-  it("aprova seleção, argumentos, resposta e grounding corretos", () => {
+  it("aprova seleção, argumentos, semântica e grounding corretos", () => {
     const score = scoreBenchmarkCase({
       testCase: {
         id: "july",
@@ -27,16 +27,36 @@ describe("benchmark scoring", () => {
             },
           },
         ],
-        answerMustContainAny: [["não há"], ["julho"]],
+        answerMustContainConcepts: ["data_absence"],
+        answerMustContainAny: [["julho"]],
         requireCausalGrounding: true,
       },
-      answer: "Não há transações em julho.",
+      answer: "O conjunto não contém registros de transações em julho.",
       toolCalls: [julyTool],
     });
 
     expect(score.passed).toBe(true);
     expect(score.toolSelection).toBe(1);
     expect(score.argumentAccuracy).toBe(1);
+    expect(score.semanticAnswer).toBe(1);
+  });
+
+  it("não reprova formatação monetária diferente", () => {
+    const score = scoreBenchmarkCase({
+      testCase: {
+        id: "money",
+        description: "test",
+        question: "Analise",
+        requiredTools: [{ name: "get_cash_flow" }],
+        answerMustContainConcepts: ["cash_flow"],
+        answerMustContainNumbers: [{ anyOf: [2845.64] }],
+      },
+      answer: "Seu fluxo de caixa líquido foi R$ 2\u202f845,64.",
+      toolCalls: [{ ...julyTool, arguments: {} }],
+    });
+
+    expect(score.passed).toBe(true);
+    expect(score.numericAnswer).toBe(1);
   });
 
   it("reprova claim causal generalizado", () => {

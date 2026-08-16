@@ -6,9 +6,9 @@ export const benchmarkCases: BenchmarkCase[] = [
     description: "Consulta ampla deve usar o motor de fluxo sem inventar período.",
     question: "Analise meu fluxo financeiro",
     requiredTools: [{ name: "get_cash_flow", expectedArguments: {} }],
-    answerMustContainAny: [
-      ["fluxo"],
-      ["2.845", "2845", "5.650", "5650", "2.804", "2804"],
+    answerMustContainConcepts: ["cash_flow"],
+    answerMustContainNumbers: [
+      { anyOf: [2845.64, 5650, 2804.36], tolerance: 0.02 },
     ],
     requireCausalGrounding: true,
   },
@@ -25,10 +25,8 @@ export const benchmarkCases: BenchmarkCase[] = [
         },
       },
     ],
-    answerMustContainAny: [
-      ["não há", "não existem", "sem registros", "não existem transações"],
-      ["julho", "agosto"],
-    ],
+    answerMustContainConcepts: ["data_absence"],
+    answerMustContainAny: [["julho", "agosto"]],
     requireCausalGrounding: true,
   },
   {
@@ -36,10 +34,7 @@ export const benchmarkCases: BenchmarkCase[] = [
     description: "Dimensão inexistente deve ser confirmada via capabilities.",
     question: "Quanto tenho investido?",
     requiredTools: [{ name: "get_data_capabilities", expectedArguments: {} }],
-    answerMustContainAny: [
-      ["investimento", "investimentos"],
-      ["não há", "não existem", "não disponível", "indisponível"],
-    ],
+    answerMustContainConcepts: ["investments", "data_absence"],
     requireCausalGrounding: true,
   },
   {
@@ -47,10 +42,7 @@ export const benchmarkCases: BenchmarkCase[] = [
     description: "Nubank/Itaú devem ser tratados como instituição, não categoria.",
     question: "Eu gastei mais no Nubank ou no Itaú?",
     requiredTools: [{ name: "get_data_capabilities", expectedArguments: {} }],
-    answerMustContainAny: [
-      ["instituição", "financial_institution"],
-      ["não", "indisponível"],
-    ],
+    answerMustContainConcepts: ["institution", "data_absence"],
     requireCausalGrounding: true,
   },
   {
@@ -59,10 +51,8 @@ export const benchmarkCases: BenchmarkCase[] = [
       "Maior categoria deve ser explicada quantitativamente sem inventar causas comportamentais.",
     question: "Qual foi minha maior categoria de gastos e por quê?",
     requiredTools: [{ name: "get_spending_by_category", expectedArguments: {} }],
-    answerMustContainAny: [
-      ["housing", "habitação"],
-      ["1.400", "1400"],
-    ],
+    answerMustContainConcepts: ["housing"],
+    answerMustContainNumbers: [{ anyOf: [1400], tolerance: 0.02 }],
     answerMustNotContain: [
       "custos de moradia costumam",
       "geralmente",
@@ -82,10 +72,8 @@ export const benchmarkCases: BenchmarkCase[] = [
         expectedArguments: { category: "housing" },
       },
     ],
-    answerMustContainAny: [
-      ["aluguel"],
-      ["1.400", "1400"],
-    ],
+    answerMustContainConcepts: ["rent"],
+    answerMustContainNumbers: [{ anyOf: [1400], tolerance: 0.02 }],
     requireCausalGrounding: true,
   },
   {
@@ -93,10 +81,8 @@ export const benchmarkCases: BenchmarkCase[] = [
     description: "Maior gasto individual deve usar a tool de maiores despesas.",
     question: "Qual foi meu maior gasto individual?",
     requiredTools: [{ name: "get_largest_expenses" }],
-    answerMustContainAny: [
-      ["aluguel"],
-      ["1.400", "1400"],
-    ],
+    answerMustContainConcepts: ["rent"],
+    answerMustContainNumbers: [{ anyOf: [1400], tolerance: 0.02 }],
     requireCausalGrounding: true,
   },
 ];

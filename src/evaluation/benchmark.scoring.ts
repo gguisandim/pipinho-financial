@@ -1,5 +1,10 @@
 import { evaluateCausalGrounding } from "../agent/causal-grounding.js";
 import type { AgentToolTrace } from "../agent/financial-agent.types.js";
+import {
+  containsBenchmarkConcept,
+  containsExpectedNumber,
+  normalizeBenchmarkText,
+} from "./benchmark.text.js";
 import type {
   BenchmarkCase,
   BenchmarkCaseScore,
@@ -30,13 +35,7 @@ function partialMatch(actual: unknown, expected: Record<string, unknown>): boole
 }
 
 function includesNormalized(answer: string, needle: string): boolean {
-  const normalize = (value: string) =>
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-
-  return normalize(answer).includes(normalize(needle));
+  return normalizeBenchmarkText(answer).includes(normalizeBenchmarkText(needle));
 }
 
 export function scoreBenchmarkCase(options: {
@@ -91,18 +90,41 @@ export function scoreBenchmarkCase(options: {
     failures.push("arguments: argumentos esperados não foram observados");
   }
 
-  let answerRequirements = 1;
+  let semanticAnswer = 1;
+  for (const concept of testCase.answerMustContainConcepts ?? []) {
+    if (!containsBenchmarkConcept(answer, concept)) {
+      semanticAnswer = 0;
+      failures.push(`semantic_answer: conceito ausente: ${concept}`);
+    }
+  }
+
   for (const group of testCase.answerMustContainAny ?? []) {
     if (!group.some((needle) => includesNormalized(answer, needle))) {
-      answerRequirements = 0;
-      failures.push(`answer: faltou um dos termos [${group.join(" | ")}]`);
+      semanticAnswer = 0;
+      failures.push(`semantic_answer: faltou um dos termos [${group.join(" | ")}]`);
     }
   }
 
   for (const forbidden of testCase.answerMustNotContain ?? []) {
     if (includesNormalized(answer, forbidden)) {
-      answerRequirements = 0;
-      failures.push(`answer: claim proibido encontrado: ${forbidden}`);
+      semanticAnswer = 0;
+      failures.push(`semantic_answer: claim proibido encontrado: ${forbidden}`);
+    }
+  }
+
+  let numericAnswer = 1;
+  for (const expectation of testCase.answerMustContainNumbers ?? []) {
+    if (
+      !containsExpectedNumber({
+        answer,
+        expected: expectation.anyOf,
+        tolerance: expectation.tolerance,
+      })
+    ) {
+      numericAnswer = 0;
+      failures.push(
+        `numeric_answer: nenhum valor esperado encontrado [${expectation.anyOf.join(" | ")}]`,
+      );
     }
   }
 
@@ -114,16 +136,21 @@ export function scoreBenchmarkCase(options: {
     );
   }
 
+  const answerRequirements = semanticAnswer === 1 && numericAnswer === 1 ? 1 : 0;
+
   return {
     toolSelection,
     argumentAccuracy,
     grounding,
+    semanticAnswer,
+    numericAnswer,
     answerRequirements,
     passed:
       toolSelection === 1 &&
       argumentAccuracy === 1 &&
       grounding === 1 &&
-      answerRequirements === 1,
+      semanticAnswer === 1 &&
+      numericAnswer === 1,
     failures,
   };
 }

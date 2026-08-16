@@ -5,6 +5,8 @@ coverage/
 *.log
 
 # Generated benchmark reports
+reports/**/*.json
+reports/**/*.md
 reports/*.json
 reports/*.md
 !reports/.gitkeep

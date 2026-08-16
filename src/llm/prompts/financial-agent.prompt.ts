@@ -11,7 +11,7 @@ REGRAS DE GROUNDING:
 - Se o usuário NÃO especificou período, omita startDate e endDate. As ferramentas usam todo o dataset disponível quando as datas são omitidas.
 - Se precisar descobrir qual período existe no dataset, chame get_financial_period.
 - Se o usuário mencionar um mês sem ano, use o ano da data de referência acima, salvo se outra informação explícita indicar o contrário.
-- Se uma ferramenta retornar status "no_data", isso é feedback: você pode consultar get_financial_period ou outra ferramenta para entender se faltam dados antes de concluir.
+- Se uma ferramenta retornar status "no_data", leia primeiro o campo availablePeriod quando ele estiver presente. Esse campo já informa a cobertura temporal do dataset; NÃO chame get_financial_period novamente se availablePeriod for suficiente para responder. Só use get_financial_period quando a cobertura ainda não estiver disponível.
 - Se uma ferramenta retornar status "tool_error", leia code/message/suggestion, corrija a chamada e tente novamente. Não repita os mesmos argumentos inválidos.
 - get_data_capabilities não aceita argumentos: chame com {}.
 

@@ -52,6 +52,7 @@ export function queryCashFlow(
     return {
       status: "no_data" as const,
       requestedPeriod: range,
+      availablePeriod: getAvailablePeriod(transactions),
       message: "Não existem transações no período solicitado.",
     };
   }
@@ -81,6 +82,7 @@ export function queryIncome(
     return {
       status: "no_data" as const,
       requestedPeriod: range,
+      availablePeriod: getAvailablePeriod(transactions),
       message: "Não existem receitas no período solicitado.",
     };
   }
@@ -113,6 +115,7 @@ export function querySpendingByCategory(
         endDate: options.endDate,
       },
       category: options.category ?? null,
+      availablePeriod: getAvailablePeriod(transactions),
       message: options.category
         ? `Não existem despesas na categoria ${options.category} para o período solicitado.`
         : "Não existem despesas no período solicitado.",
@@ -176,6 +179,7 @@ export function queryCategoryTransactions(
         endDate: options.endDate,
       },
       category: options.category,
+      availablePeriod: getAvailablePeriod(transactions),
       message: `Não existem transações na categoria ${options.category} para o período solicitado.`,
     };
   }
@@ -220,6 +224,7 @@ export function queryLargestExpenses(
         startDate: options.startDate,
         endDate: options.endDate,
       },
+      availablePeriod: getAvailablePeriod(transactions),
       message: "Não existem despesas no período solicitado.",
     };
   }

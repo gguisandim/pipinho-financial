@@ -1,13 +1,12 @@
-import { env } from "../config/env.js";
-import { GroqProvider } from "../llm/providers/groq.provider.js";
-import { GroqToolCallingProvider } from "../llm/tool-calling/groq-tool-calling.provider.js";
-import { AgenticFinancialService } from "../services/agentic-financial.service.js";
 import { benchmarkCases } from "./benchmark.cases.js";
 import { writeBenchmarkReport, summarizeBenchmark } from "./benchmark.report.js";
 import { scoreBenchmarkCase } from "./benchmark.scoring.js";
+import { classifyBenchmarkError } from "./benchmark.errors.js";
+import { createBenchmarkProvider } from "./providers/provider.factory.js";
 import type {
   BenchmarkCase,
   BenchmarkCaseResult,
+  BenchmarkProviderId,
   BenchmarkReport,
 } from "./benchmark.types.js";
 
@@ -17,13 +16,17 @@ export interface BenchmarkProgressEvent {
   total: number;
   run: number;
   caseId: string;
+  provider: BenchmarkProviderId;
   passed?: boolean;
   latencyMs?: number;
   tokens?: number | null;
   waitMs?: number;
+  executionStatus?: import("./benchmark.types.js").BenchmarkExecutionStatus;
+  error?: string;
 }
 
 export interface RunBenchmarkOptions {
+  provider?: BenchmarkProviderId;
   runs?: number;
   caseIds?: string[];
   delayMs?: number;
@@ -49,7 +52,7 @@ function retryAfterMs(error: unknown): number | null {
 }
 
 async function answerWithRateLimitRetry(
-  service: AgenticFinancialService,
+  service: ReturnType<typeof createBenchmarkProvider>["service"],
   question: string,
   maxRetries = 2,
   onRateLimit?: (waitMs: number) => void,
@@ -69,8 +72,8 @@ async function answerWithRateLimitRetry(
 }
 
 export async function runBenchmark(options: RunBenchmarkOptions = {}) {
+  const provider = options.provider ?? "groq";
   const runs = options.runs ?? 1;
-  const delayMs = options.delayMs ?? 25000;
   const referenceDate = options.referenceDate ?? "2026-08-16";
   const selectedCases = options.caseIds?.length
     ? benchmarkCases.filter((testCase) => options.caseIds?.includes(testCase.id))
@@ -80,6 +83,8 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
     throw new Error("Nenhum caso de benchmark corresponde aos filtros informados.");
   }
 
+  const providerBundle = createBenchmarkProvider({ provider, referenceDate });
+  const delayMs = options.delayMs ?? providerBundle.defaultDelayMs;
   const results: BenchmarkCaseResult[] = [];
   const totalExecutions = runs * selectedCases.length;
   let currentExecution = 0;
@@ -94,16 +99,12 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
         total: totalExecutions,
         run,
         caseId: testCase.id,
+        provider,
       });
-      const service = new AgenticFinancialService(
-        new GroqToolCallingProvider(env.GROQ_AGENT_MODEL),
-        new GroqProvider(env.GROQ_FINAL_MODEL),
-        { referenceDate },
-      );
 
       try {
         const result = await answerWithRateLimitRetry(
-          service,
+          providerBundle.service,
           testCase.question,
           2,
           (waitMs) =>
@@ -113,6 +114,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
               total: totalExecutions,
               run,
               caseId: testCase.id,
+              provider,
               waitMs,
             }),
         );
@@ -128,6 +130,13 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
           description: testCase.description,
           question: testCase.question,
           answer: result.answer,
+          provider,
+          model: result.llm.agentModel,
+          models: [...new Set([
+            ...result.turns.map((turn) => turn.model),
+            ...(result.llm.groundingRepair?.model ? [result.llm.groundingRepair.model] : []),
+            ...(result.llm.fallback?.model ? [result.llm.fallback.model] : []),
+          ])],
           termination: result.termination,
           toolCalls: result.toolCalls.map(({ name, arguments: args, outcome, result: toolResult }) => ({
             name,
@@ -139,6 +148,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
           latencyMs: result.llm.total.latencyMs,
           tokens: result.llm.total.usage.totalTokens ?? null,
           causalGrounding: result.grounding.causal,
+          executionStatus: "completed",
           score,
         });
 
@@ -148,18 +158,28 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
           total: totalExecutions,
           run,
           caseId: testCase.id,
+          provider,
           passed: score.passed,
           latencyMs: result.llm.total.latencyMs,
           tokens: result.llm.total.usage.totalTokens ?? null,
+          executionStatus: "completed",
         });
       } catch (error) {
+        const executionStatus = classifyBenchmarkError(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const countsAsModelQualityFailure = executionStatus === "model_protocol_error";
+
         results.push({
           run,
           caseId: testCase.id,
           description: testCase.description,
           question: testCase.question,
           answer: "",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
+          executionStatus,
+          provider,
+          model: providerBundle.configuredModel,
+          models: [providerBundle.configuredModel],
           termination: null,
           toolCalls: [],
           iterations: 0,
@@ -170,10 +190,15 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
             toolSelection: 0,
             argumentAccuracy: 0,
             grounding: 0,
+            semanticAnswer: 0,
+            numericAnswer: 0,
             answerRequirements: 0,
             passed: false,
             failures: [
-              `execution_error: ${error instanceof Error ? error.message : String(error)}`,
+              `${executionStatus}: ${errorMessage}`,
+              ...(countsAsModelQualityFailure
+                ? ["A falha de protocolo conta como erro de qualidade do modelo."]
+                : []),
             ],
           },
         });
@@ -184,9 +209,12 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
           total: totalExecutions,
           run,
           caseId: testCase.id,
+          provider,
           passed: false,
           latencyMs: 0,
           tokens: null,
+          executionStatus,
+          error: errorMessage,
         });
       }
 
@@ -197,6 +225,7 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
           total: totalExecutions,
           run,
           caseId: testCase.id,
+          provider,
           waitMs: delayMs,
         });
         await sleep(delayMs);
@@ -208,7 +237,8 @@ export async function runBenchmark(options: RunBenchmarkOptions = {}) {
   const report: BenchmarkReport = {
     generatedAt,
     summary: summarizeBenchmark({
-      model: env.GROQ_AGENT_MODEL,
+      provider,
+      configuredModel: providerBundle.configuredModel,
       referenceDate,
       runs,
       caseCount: selectedCases.length,
