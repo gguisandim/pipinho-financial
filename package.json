@@ -1,0 +1,28 @@
+{
+  "name": "finance-llm-lab",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "cycle0": "tsx src/scripts/cycle0.ts",
+    "cycle1": "tsx src/scripts/cycle1.ts",
+    "cycle2": "tsx src/scripts/cycle2.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "cycle3": "tsx src/scripts/cycle3.ts"
+  },
+  "dependencies": {
+    "dotenv": "latest",
+    "fastify": "latest",
+    "groq-sdk": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
