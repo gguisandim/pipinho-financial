@@ -1,0 +1,232 @@
+import { env } from "../config/env.js";
+import { executeFinancialToolSafely } from "../agent/financial-tool-guard.js";
+import type {
+  AgentTermination,
+  AgentToolTrace,
+  AgentTurnTrace,
+} from "../agent/financial-agent.types.js";
+import { financialToolDefinitions } from "../financial-tools/financial-tools.js";
+import { buildFinancialAgentSystemPrompt } from "../llm/prompts/financial-agent.prompt.js";
+import {
+  FINANCIAL_AGENT_FALLBACK_SYSTEM_PROMPT,
+  buildFinancialAgentFallbackPrompt,
+} from "../llm/prompts/financial-agent-fallback.prompt.js";
+import type { LlmProvider, LlmUsage } from "../llm/providers/llm-provider.js";
+import type {
+  ToolCallingLlmProvider,
+  ToolCallingMessage,
+} from "../llm/tool-calling/tool-calling.types.js";
+
+function parseArgumentsForTrace(rawArguments: string): unknown {
+  try {
+    return rawArguments.trim() ? JSON.parse(rawArguments) : {};
+  } catch {
+    return rawArguments;
+  }
+}
+
+function usageSum(usages: LlmUsage[]): LlmUsage {
+  const values = (key: keyof LlmUsage) => usages.map((usage) => usage[key]);
+  const sum = (numbers: Array<number | undefined>) =>
+    numbers.every((value) => value === undefined)
+      ? undefined
+      : numbers.reduce<number>((total, value) => total + (value ?? 0), 0);
+
+  return {
+    promptTokens: sum(values("promptTokens")),
+    completionTokens: sum(values("completionTokens")),
+    totalTokens: sum(values("totalTokens")),
+  };
+}
+
+function defaultReferenceDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export class AgenticFinancialService {
+  constructor(
+    private readonly llm: ToolCallingLlmProvider,
+    private readonly fallbackLlm: LlmProvider,
+    private readonly options: {
+      maxIterations?: number;
+      maxToolCalls?: number;
+      referenceDate?: string;
+    } = {},
+  ) {}
+
+  async answer(question: string) {
+    const maxIterations = this.options.maxIterations ?? env.GROQ_AGENT_MAX_ITERATIONS;
+    const maxToolCalls = this.options.maxToolCalls ?? env.GROQ_AGENT_MAX_TOOL_CALLS;
+    const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
+
+    const messages: ToolCallingMessage[] = [
+      {
+        role: "system",
+        content: buildFinancialAgentSystemPrompt(referenceDate),
+      },
+      { role: "user", content: question },
+    ];
+
+    const tools: AgentToolTrace[] = [];
+    const turns: AgentTurnTrace[] = [];
+    const seenCalls = new Set<string>();
+    let termination: AgentTermination | null = null;
+    let answer: string | null = null;
+    let totalToolCalls = 0;
+
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+      const turn = await this.llm.completeWithTools({
+        messages,
+        tools: financialToolDefinitions,
+        toolChoice: iteration === 1 ? "required" : "auto",
+        parallelToolCalls: true,
+      });
+
+      turns.push({
+        iteration,
+        model: turn.model,
+        latencyMs: turn.latencyMs,
+        usage: turn.usage,
+        finishReason: turn.finishReason,
+        toolCallCount: turn.toolCalls.length,
+      });
+
+      if (turn.toolCalls.length === 0) {
+        if (turn.text?.trim()) {
+          answer = turn.text.trim();
+          termination = "model_answer";
+          break;
+        }
+
+        termination = "empty_turn_fallback";
+        break;
+      }
+
+      messages.push({
+        role: "assistant",
+        content: turn.text,
+        toolCalls: turn.toolCalls,
+      });
+
+      for (const toolCall of turn.toolCalls) {
+        totalToolCalls += 1;
+        const parsedArguments = parseArgumentsForTrace(toolCall.function.arguments);
+        const signature = `${toolCall.function.name}:${JSON.stringify(parsedArguments)}`;
+
+        let outcome: "executed" | "rejected";
+        let result: unknown;
+
+        if (totalToolCalls > maxToolCalls) {
+          outcome = "rejected";
+          result = {
+            status: "tool_error",
+            code: "tool_budget_exhausted",
+            message: `O agente atingiu o limite de ${maxToolCalls} chamadas de ferramentas.`,
+            suggestion: "Use os resultados já obtidos e produza a resposta final.",
+          };
+          termination = "tool_budget_fallback";
+        } else if (seenCalls.has(signature)) {
+          outcome = "rejected";
+          result = {
+            status: "tool_error",
+            code: "duplicate_call",
+            message:
+              "Esta mesma ferramenta com os mesmos argumentos já foi executada nesta resposta.",
+            suggestion:
+              "Use o resultado anterior, mude os argumentos ou escolha outra ferramenta.",
+          };
+        } else {
+          seenCalls.add(signature);
+          const execution = executeFinancialToolSafely({
+            question,
+            name: toolCall.function.name,
+            rawArguments: toolCall.function.arguments,
+            referenceDate,
+          });
+          outcome = execution.status;
+          result = execution.result;
+        }
+
+        tools.push({
+          iteration,
+          id: toolCall.id,
+          name: toolCall.function.name,
+          arguments: parsedArguments,
+          outcome,
+          result,
+        });
+
+        messages.push({
+          role: "tool",
+          toolCallId: toolCall.id,
+          name: toolCall.function.name,
+          content: JSON.stringify(result),
+        });
+      }
+
+      if (termination === "tool_budget_fallback") break;
+    }
+
+    if (!answer) {
+      termination ??= "max_iterations_fallback";
+
+      const fallback = await this.fallbackLlm.complete({
+        system: FINANCIAL_AGENT_FALLBACK_SYSTEM_PROMPT,
+        user: buildFinancialAgentFallbackPrompt(
+          question,
+          tools.map(({ iteration, name, arguments: args, outcome, result }) => ({
+            iteration,
+            name,
+            arguments: args,
+            outcome,
+            result,
+          })),
+        ),
+      });
+
+      answer = fallback.text || "Não foi possível produzir uma resposta final.";
+
+      return {
+        question,
+        referenceDate,
+        answer,
+        termination,
+        iterations: turns.length,
+        toolCalls: tools,
+        turns,
+        llm: {
+          agentModel: turns.at(-1)?.model ?? env.GROQ_AGENT_MODEL,
+          fallback: {
+            model: fallback.model,
+            latencyMs: fallback.latencyMs,
+            usage: fallback.usage,
+          },
+          total: {
+            latencyMs:
+              turns.reduce((total, turn) => total + turn.latencyMs, 0) +
+              fallback.latencyMs,
+            usage: usageSum([...turns.map((turn) => turn.usage), fallback.usage]),
+          },
+        },
+      };
+    }
+
+    return {
+      question,
+      referenceDate,
+      answer,
+      termination,
+      iterations: turns.length,
+      toolCalls: tools,
+      turns,
+      llm: {
+        agentModel: turns.at(-1)?.model ?? env.GROQ_AGENT_MODEL,
+        fallback: null,
+        total: {
+          latencyMs: turns.reduce((total, turn) => total + turn.latencyMs, 0),
+          usage: usageSum(turns.map((turn) => turn.usage)),
+        },
+      },
+    };
+  }
+}

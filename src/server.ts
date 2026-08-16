@@ -7,13 +7,14 @@ const app = Fastify({ logger: true });
 
 app.get("/", async () => ({
   name: "finance-llm-lab",
-  version: "0.3.0",
+  version: "0.4.0",
   status: "running",
   cycles: {
     cycle0: "Financial Engine determinístico",
     cycle1: "LLM com resposta textual",
     cycle2: "Structured Outputs + Zod",
     cycle3: "Local Tool Calling + execução financeira controlada",
+    cycle4: "Agent Loop multi-turno + guardrails + limites operacionais",
   },
   endpoints: {
     health: "GET /health",
@@ -21,6 +22,7 @@ app.get("/", async () => ({
     aiText: "POST /api/v1/ai/explain-summary",
     aiStructured: "POST /api/v1/ai/structured-analysis",
     aiTools: "POST /api/v1/ai/tool-analysis",
+    aiAgent: "POST /api/v1/ai/agent-analysis",
   },
 }));
 

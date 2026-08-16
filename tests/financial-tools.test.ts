@@ -12,6 +12,17 @@ describe("executeFinancialTool", () => {
     expect(result.netCashFlow).toBe(2845.64);
   });
 
+
+  it("trata null em argumentos opcionais como campo omitido", () => {
+    const result = executeFinancialTool(
+      "get_cash_flow",
+      JSON.stringify({ startDate: null, endDate: null }),
+    ) as { status: string; netCashFlow?: number };
+
+    expect(result.status).toBe("ok");
+    expect(result.netCashFlow).toBe(2845.64);
+  });
+
   it("rejeita data em formato inválido", () => {
     expect(() =>
       executeFinancialTool(

@@ -7,7 +7,8 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 0:** contrato de dados + fixture sintética + Financial Engine determinístico.
 - **Ciclo 1:** primeira chamada à Groq, com resposta textual livre.
 - **Ciclo 2:** Structured Outputs + JSON Schema + Zod em runtime.
-- **Ciclo 3:** Local Tool Calling: o LLM escolhe funções financeiras, a aplicação valida e executa localmente e devolve os resultados ao modelo.
+- **Ciclo 3:** Local Tool Calling: o LLM escolhe funções financeiras e a aplicação executa uma rodada controlada.
+- **Ciclo 4:** Agent Loop multi-turno: o modelo pode usar resultados e erros de tools como feedback, corrigir a estratégia e iterar sob limites explícitos.
 
 Princípio arquitetural:
 
@@ -45,6 +46,10 @@ GROQ_API_KEY=sua_chave
 GROQ_MODEL=openai/gpt-oss-20b
 GROQ_STRUCTURED_MODEL=openai/gpt-oss-20b
 GROQ_TOOL_MODEL=openai/gpt-oss-20b
+GROQ_FINAL_MODEL=openai/gpt-oss-20b
+GROQ_AGENT_MODEL=openai/gpt-oss-20b
+GROQ_AGENT_MAX_ITERATIONS=5
+GROQ_AGENT_MAX_TOOL_CALLS=12
 ```
 
 Nunca versione `.env`.
@@ -179,6 +184,7 @@ GET  /api/v1/finance/summary
 POST /api/v1/ai/explain-summary
 POST /api/v1/ai/structured-analysis
 POST /api/v1/ai/tool-analysis
+POST /api/v1/ai/agent-analysis
 ```
 
 PowerShell para o Ciclo 3:
@@ -215,7 +221,7 @@ Ele executa **uma rodada** de tools:
 LLM -> tool(s) -> LLM -> resposta
 ```
 
-A primeira chamada pode solicitar várias tools em paralelo. Na segunda chamada não enviamos `tools` nem `tool_choice`: o modelo recebe apenas a conversa e os resultados das funções e deve produzir a resposta final. Isso evita um HTTP 400 que pode ocorrer quando alguns modelos tentam chamar uma ferramenta mesmo com `tool_choice = none`.
+A primeira chamada pode solicitar várias tools em paralelo. Depois dessa rodada, o Ciclo 3 faz uma síntese em uma chamada nova e limpa, sem histórico `assistant.tool_calls`/`role=tool`. Isso evita o HTTP 400 observado quando o modelo tenta continuar chamando ferramentas num turno sem tools disponíveis.
 
 Ainda não existe o comportamento:
 
@@ -233,16 +239,39 @@ tool B
 ...
 ```
 
-Isso será o **Ciclo 4: Agent Loop**.
+Esse comportamento foi implementado no **Ciclo 4: Agent Loop**.
 
 ## Ainda fora do escopo
 
 - Pluggy / Open Finance real
 - PostgreSQL
 - autenticação
-- agent loop multi-turno
 - RAG
 - embeddings
 - LangChain
 - memória de conversa
 - forecasting
+
+## Ciclo 4 — Agent Loop
+
+O Ciclo 4 permite múltiplas rodadas de tool calling e adiciona guardrails determinísticos contra datas inventadas, argumentos inválidos, chamadas duplicadas e loops sem fim.
+
+```bash
+npm run cycle4 -- "Analise meu fluxo financeiro"
+```
+
+Endpoint:
+
+```text
+POST /api/v1/ai/agent-analysis
+```
+
+Configuração principal:
+
+```env
+GROQ_AGENT_MODEL=openai/gpt-oss-20b
+GROQ_AGENT_MAX_ITERATIONS=5
+GROQ_AGENT_MAX_TOOL_CALLS=12
+```
+
+Veja `docs/CICLO_4.md`.

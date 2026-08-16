@@ -65,7 +65,7 @@ export const financialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_financial_period",
       description:
-        "Retorna o intervalo de datas realmente disponível no conjunto financeiro atual. Use quando precisar confirmar cobertura temporal dos dados.",
+        "Retorna o intervalo de datas realmente disponível no conjunto financeiro atual. Use para descobrir a cobertura temporal e para se recuperar de um resultado no_data quando o usuário não informou um período.",
       parameters: {
         type: "object",
         properties: {},
@@ -78,17 +78,19 @@ export const financialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_cash_flow",
       description:
-        "Calcula deterministicamente receitas, despesas, fluxo líquido e taxa de poupança. Pode filtrar por período. Use para perguntas gerais de fluxo financeiro.",
+        "Calcula deterministicamente receitas, despesas, fluxo líquido e taxa de poupança. Pode filtrar por período. Se o usuário não informou período, OMITA startDate/endDate; nunca invente um ano ou intervalo padrão.",
       parameters: {
         type: "object",
         properties: {
           startDate: {
-            type: "string",
-            description: "Data inicial inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data inicial inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
           endDate: {
-            type: "string",
-            description: "Data final inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data final inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
         },
         additionalProperties: false,
@@ -100,17 +102,19 @@ export const financialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_income",
       description:
-        "Retorna a receita total calculada pelo backend para o período solicitado.",
+        "Retorna a receita total calculada pelo backend. Se o usuário não informou período, OMITA startDate/endDate; nunca invente datas.",
       parameters: {
         type: "object",
         properties: {
           startDate: {
-            type: "string",
-            description: "Data inicial inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data inicial inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
           endDate: {
-            type: "string",
-            description: "Data final inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data final inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
         },
         additionalProperties: false,
@@ -122,13 +126,15 @@ export const financialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_spending_by_category",
       description:
-        "Retorna despesas agregadas por categoria. Quando category for informada, retorna somente essa categoria. Pode filtrar por período.",
+        "Retorna despesas agregadas por categoria. Quando category for informada, retorna somente essa categoria. Se o usuário não informou período, OMITA startDate/endDate; nunca invente datas.",
       parameters: {
         type: "object",
         properties: {
           category: {
-            type: "string",
-            enum: [
+            anyOf: [
+              {
+                type: "string",
+                enum: [
               "housing",
               "groceries",
               "food_delivery",
@@ -139,17 +145,23 @@ export const financialToolDefinitions: ToolDefinition[] = [
               "restaurants",
               "education",
               "fitness",
-              "shopping",
+                  "shopping",
+                ],
+              },
+              { type: "null" },
             ],
-            description: "Categoria financeira canônica, quando a pergunta indicar uma categoria específica.",
+            description:
+              "Categoria financeira canônica. Use null ou omita quando a pergunta não indicar uma categoria específica.",
           },
           startDate: {
-            type: "string",
-            description: "Data inicial inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data inicial inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
           endDate: {
-            type: "string",
-            description: "Data final inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data final inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
         },
         additionalProperties: false,
@@ -161,21 +173,24 @@ export const financialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_largest_expenses",
       description:
-        "Retorna as maiores transações de despesa do período. Use quando a pergunta pedir maiores compras, gastos individuais ou concentração em transações específicas.",
+        "Retorna as maiores transações de despesa. Use quando a pergunta pedir maiores compras ou gastos individuais. Se o usuário não informou período, OMITA startDate/endDate; nunca invente datas.",
       parameters: {
         type: "object",
         properties: {
           limit: {
-            type: "number",
-            description: "Quantidade de despesas, entre 1 e 10. Padrão 5.",
+            type: ["number", "null"],
+            description:
+              "Quantidade de despesas, entre 1 e 10. Use null ou omita para aplicar o padrão 5.",
           },
           startDate: {
-            type: "string",
-            description: "Data inicial inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data inicial inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
           endDate: {
-            type: "string",
-            description: "Data final inclusiva em YYYY-MM-DD.",
+            type: ["string", "null"],
+            description:
+              "Data final inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
           },
         },
         additionalProperties: false,
@@ -187,7 +202,7 @@ export const financialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_data_capabilities",
       description:
-        "Informa quais campos e análises existem ou não existem no dataset atual. Use para perguntas sobre banco, conta, saldo, investimento, cartão, empréstimo ou outra dimensão que possa não estar disponível.",
+        "Informa quais campos e análises existem ou não existem no dataset atual. Use para banco, conta, saldo, investimento, cartão ou empréstimo. Esta ferramenta NÃO aceita argumentos: chame sempre com {}.",
       parameters: {
         type: "object",
         properties: {},
@@ -197,11 +212,19 @@ export const financialToolDefinitions: ToolDefinition[] = [
   },
 ];
 
+function normalizeOptionalNulls(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== null),
+  );
+}
+
 function parseRawArguments(rawArguments: string): unknown {
   if (!rawArguments.trim()) return {};
 
   try {
-    return JSON.parse(rawArguments);
+    return normalizeOptionalNulls(JSON.parse(rawArguments));
   } catch (error) {
     throw new Error(
       `Argumentos da tool não são JSON válido: ${error instanceof Error ? error.message : "erro desconhecido"}`,

@@ -1,6 +1,6 @@
 {
   "name": "finance-llm-lab",
-  "version": "0.3.2",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "cycle2": "tsx src/scripts/cycle2.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "cycle3": "tsx src/scripts/cycle3.ts"
+    "cycle3": "tsx src/scripts/cycle3.ts",
+    "cycle4": "tsx src/scripts/cycle4.ts"
   },
   "dependencies": {
     "dotenv": "latest",
