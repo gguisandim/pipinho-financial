@@ -3,3 +3,8 @@ dist/
 .env
 coverage/
 *.log
+
+# Generated benchmark reports
+reports/*.json
+reports/*.md
+!reports/.gitkeep

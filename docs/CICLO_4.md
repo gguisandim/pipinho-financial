@@ -93,3 +93,9 @@ normalmente, o provider tenta recuperar `failed_generation` e encaminhá-la ao l
 local. Assim, Zod e os guards semânticos continuam sendo a autoridade final sobre
 a execução da ferramenta, em vez de um erro de validação do provider encerrar o
 agente imediatamente.
+
+## Atualização de causal grounding (v0.5.0)
+
+Após o benchmark manual do Ciclo 4, foi observado um claim não fundamentado: o modelo explicou `housing` usando generalizações sobre aluguel, condomínio e manutenção sem essas informações terem sido retornadas pela tool usada.
+
+A partir da v0.5.0, o agente distingue explicação quantitativa, composição observada e causa comportamental. A composição pode ser consultada por `get_category_transactions`; causas comportamentais continuam indisponíveis no dataset sintético. A resposta final também passa por um guard determinístico e, quando necessário, por um repair pass controlado.

@@ -9,6 +9,7 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 2:** Structured Outputs + JSON Schema + Zod em runtime.
 - **Ciclo 3:** Local Tool Calling: o LLM escolhe funções financeiras e a aplicação executa uma rodada controlada.
 - **Ciclo 4:** Agent Loop multi-turno: o modelo pode usar resultados e erros de tools como feedback, corrigir a estratégia e iterar sob limites explícitos.
+- **Ciclo 5A:** evaluation harness determinístico para medir tools, argumentos, grounding, latência e tokens.
 
 Princípio arquitetural:
 
@@ -275,3 +276,49 @@ GROQ_AGENT_MAX_TOOL_CALLS=12
 ```
 
 Veja `docs/CICLO_4.md`.
+
+## Ciclo 5A — Evaluation Harness
+
+O Ciclo 5A transforma o benchmark manual dos ciclos anteriores em uma suíte executável.
+
+```bash
+npm run benchmark
+```
+
+Métricas:
+
+- tool selection accuracy;
+- argument accuracy;
+- causal grounding;
+- requisitos mínimos da resposta;
+- pass rate;
+- iterações e tool calls médias;
+- latência média, P50 e P95;
+- tokens médios e totais.
+
+O agente também ganhou uma camada de **causal grounding**. Respostas que introduzem generalizações ou detalhes não retornados pelas tools são detectadas deterministicamente e passam por uma etapa de reparo antes de chegar ao usuário.
+
+Para inspecionar um único caso:
+
+```bash
+npm run benchmark -- --case largest-category-causal
+```
+
+Para múltiplas repetições:
+
+```bash
+npm run benchmark -- --runs 3
+```
+
+Veja `docs/CICLO_5A.md`.
+
+
+## v0.5.1 — progresso do benchmark
+
+O benchmark completo agora exibe o caso em execução, resultado, latência/tokens e a pausa entre casos. Isso evita que a espera de rate-limit pareça um travamento.
+
+```bash
+npm run benchmark
+```
+
+Para testes rápidos de um caso, use `--case`. O `--delay-ms` pode ser reduzido manualmente, mas valores muito baixos podem atingir o limite gratuito do provider.

@@ -5,6 +5,7 @@ import {
   getAvailablePeriod,
   getFinancialDataCapabilities,
   queryCashFlow,
+  queryCategoryTransactions,
   queryIncome,
   queryLargestExpenses,
   querySpendingByCategory,
@@ -44,6 +45,13 @@ const spendingSchema = z
   })
   .strict();
 
+const categoryTransactionsSchema = z
+  .object({
+    ...dateRangeShape,
+    category: categorySchema,
+  })
+  .strict();
+
 const largestExpensesSchema = z
   .object({
     ...dateRangeShape,
@@ -57,6 +65,7 @@ export type FinancialToolName =
   | "get_income"
   | "get_spending_by_category"
   | "get_largest_expenses"
+  | "get_category_transactions"
   | "get_data_capabilities";
 
 export const financialToolDefinitions: ToolDefinition[] = [
@@ -171,6 +180,48 @@ export const financialToolDefinitions: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "get_category_transactions",
+      description:
+        "Retorna as transações que compõem uma categoria específica. Use quando o usuário pedir a composição de uma categoria ou quando uma pergunta com 'por quê' exigir verificar quais transações observadas formam aquele total. Esta tool permite explicar composição, mas NÃO autoriza inferir causa comportamental.",
+      parameters: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: [
+              "housing",
+              "groceries",
+              "food_delivery",
+              "transport",
+              "utilities",
+              "subscriptions",
+              "health",
+              "restaurants",
+              "education",
+              "fitness",
+              "shopping",
+            ],
+            description: "Categoria financeira canônica obrigatória.",
+          },
+          startDate: {
+            type: ["string", "null"],
+            description:
+              "Data inicial inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
+          },
+          endDate: {
+            type: ["string", "null"],
+            description:
+              "Data final inclusiva em YYYY-MM-DD. Use null ou omita quando o usuário não informar período.",
+          },
+        },
+        required: ["category"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_largest_expenses",
       description:
         "Retorna as maiores transações de despesa. Use quando a pergunta pedir maiores compras ou gastos individuais. Se o usuário não informou período, OMITA startDate/endDate; nunca invente datas.",
@@ -259,6 +310,14 @@ export function executeFinancialTool(
       return querySpendingByCategory(syntheticTransactions, {
         ...args,
         category: args.category as TransactionCategory | undefined,
+      });
+    }
+
+    case "get_category_transactions": {
+      const args = categoryTransactionsSchema.parse(raw);
+      return queryCategoryTransactions(syntheticTransactions, {
+        ...args,
+        category: args.category as TransactionCategory,
       });
     }
 

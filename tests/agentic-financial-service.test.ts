@@ -116,3 +116,57 @@ describe("AgenticFinancialService", () => {
     expect(JSON.stringify(secondRequest)).toContain("ungrounded_date");
   });
 });
+
+class CausalAgentProvider implements ToolCallingLlmProvider {
+  private index = 0;
+
+  async completeWithTools(): Promise<ToolCallingTurnResponse> {
+    this.index += 1;
+    if (this.index === 1) {
+      return turn([
+        {
+          id: "category",
+          type: "function",
+          function: { name: "get_spending_by_category", arguments: "{}" },
+        },
+      ]);
+    }
+
+    return turn(
+      [],
+      "Housing foi a maior categoria porque custos de moradia geralmente incluem aluguel e condomínio.",
+    );
+  }
+}
+
+class GroundingRepairFallback implements LlmProvider {
+  readonly requests: LlmRequest[] = [];
+
+  async complete(request: LlmRequest): Promise<LlmResponse> {
+    this.requests.push(request);
+    return {
+      text: "Housing foi a maior categoria, com R$ 1.400. Os dados agregados permitem identificar que esse total é o maior, mas não permitem determinar a causa comportamental do gasto.",
+      provider: "fake",
+      model: "fake-repair",
+      latencyMs: 2,
+      usage: { totalTokens: 20 },
+    };
+  }
+}
+
+describe("AgenticFinancialService causal grounding", () => {
+  it("repara resposta com claim causal não sustentado antes de retornar", async () => {
+    const fallback = new GroundingRepairFallback();
+    const service = new AgenticFinancialService(new CausalAgentProvider(), fallback, {
+      referenceDate: "2026-08-16",
+    });
+
+    const result = await service.answer("Qual foi minha maior categoria de gastos e por quê?");
+
+    expect(result.grounding.causal.passed).toBe(true);
+    expect(result.grounding.causal.repaired).toBe(true);
+    expect(result.answer).not.toContain("geralmente");
+    expect(result.answer).toContain("não permitem determinar a causa comportamental");
+    expect(fallback.requests).toHaveLength(1);
+  });
+});

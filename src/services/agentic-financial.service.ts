@@ -1,4 +1,8 @@
 import { env } from "../config/env.js";
+import {
+  evaluateCausalGrounding,
+  sanitizeCausalGrounding,
+} from "../agent/causal-grounding.js";
 import { executeFinancialToolSafely } from "../agent/financial-tool-guard.js";
 import type {
   AgentTermination,
@@ -12,6 +16,10 @@ import {
   buildFinancialAgentFallbackPrompt,
 } from "../llm/prompts/financial-agent-fallback.prompt.js";
 import type { LlmProvider, LlmUsage } from "../llm/providers/llm-provider.js";
+import {
+  FINANCIAL_GROUNDING_REPAIR_SYSTEM_PROMPT,
+  buildFinancialGroundingRepairPrompt,
+} from "../llm/prompts/financial-grounding-repair.prompt.js";
 import type {
   ToolCallingLlmProvider,
   ToolCallingMessage,
@@ -167,6 +175,50 @@ export class AgenticFinancialService {
       if (termination === "tool_budget_fallback") break;
     }
 
+    let groundingRepair: {
+      model: string;
+      latencyMs: number;
+      usage: LlmUsage;
+      applied: boolean;
+    } | null = null;
+    let causalGrounding = answer
+      ? evaluateCausalGrounding(answer, tools)
+      : { passed: true, violations: [] };
+
+    if (answer && !causalGrounding.passed) {
+      const repair = await this.fallbackLlm.complete({
+        system: FINANCIAL_GROUNDING_REPAIR_SYSTEM_PROMPT,
+        user: buildFinancialGroundingRepairPrompt({
+          question,
+          answer,
+          violations: causalGrounding.violations,
+          tools,
+        }),
+      });
+
+      groundingRepair = {
+        model: repair.model,
+        latencyMs: repair.latencyMs,
+        usage: repair.usage,
+        applied: true,
+      };
+
+      const repairedText = repair.text?.trim();
+      if (repairedText) {
+        const repairedEvaluation = evaluateCausalGrounding(repairedText, tools);
+        if (repairedEvaluation.passed) {
+          answer = repairedText;
+          causalGrounding = repairedEvaluation;
+        } else {
+          answer = sanitizeCausalGrounding(repairedText, repairedEvaluation.violations);
+          causalGrounding = evaluateCausalGrounding(answer, tools);
+        }
+      } else {
+        answer = sanitizeCausalGrounding(answer, causalGrounding.violations);
+        causalGrounding = evaluateCausalGrounding(answer, tools);
+      }
+    }
+
     if (!answer) {
       termination ??= "max_iterations_fallback";
 
@@ -185,6 +237,11 @@ export class AgenticFinancialService {
       });
 
       answer = fallback.text || "Não foi possível produzir uma resposta final.";
+      causalGrounding = evaluateCausalGrounding(answer, tools);
+      if (!causalGrounding.passed) {
+        answer = sanitizeCausalGrounding(answer, causalGrounding.violations);
+        causalGrounding = evaluateCausalGrounding(answer, tools);
+      }
 
       return {
         question,
@@ -194,6 +251,13 @@ export class AgenticFinancialService {
         iterations: turns.length,
         toolCalls: tools,
         turns,
+        grounding: {
+          causal: {
+            passed: causalGrounding.passed,
+            repaired: false,
+            violations: causalGrounding.violations,
+          },
+        },
         llm: {
           agentModel: turns.at(-1)?.model ?? env.GROQ_AGENT_MODEL,
           fallback: {
@@ -219,12 +283,25 @@ export class AgenticFinancialService {
       iterations: turns.length,
       toolCalls: tools,
       turns,
+      grounding: {
+        causal: {
+          passed: causalGrounding.passed,
+          repaired: groundingRepair !== null,
+          violations: causalGrounding.violations,
+        },
+      },
       llm: {
         agentModel: turns.at(-1)?.model ?? env.GROQ_AGENT_MODEL,
         fallback: null,
+        groundingRepair,
         total: {
-          latencyMs: turns.reduce((total, turn) => total + turn.latencyMs, 0),
-          usage: usageSum(turns.map((turn) => turn.usage)),
+          latencyMs:
+            turns.reduce((total, turn) => total + turn.latencyMs, 0) +
+            (groundingRepair?.latencyMs ?? 0),
+          usage: usageSum([
+            ...turns.map((turn) => turn.usage),
+            ...(groundingRepair ? [groundingRepair.usage] : []),
+          ]),
         },
       },
     };

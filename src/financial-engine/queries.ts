@@ -148,6 +148,58 @@ export function querySpendingByCategory(
         100,
     ) / 100,
     categories,
+    evidenceScope: {
+      supportsQuantitativeComparison: true,
+      supportsBehavioralCause: false,
+      compositionTool: "get_category_transactions",
+    },
+  };
+}
+
+
+export function queryCategoryTransactions(
+  transactions: Transaction[],
+  options: DateRange & { category: TransactionCategory },
+) {
+  const selected = filterTransactions(transactions, options)
+    .filter(
+      (transaction) =>
+        transaction.type === "debit" && transaction.category === options.category,
+    )
+    .sort((a, b) => b.amount - a.amount);
+
+  if (selected.length === 0) {
+    return {
+      status: "no_data" as const,
+      requestedPeriod: {
+        startDate: options.startDate,
+        endDate: options.endDate,
+      },
+      category: options.category,
+      message: `Não existem transações na categoria ${options.category} para o período solicitado.`,
+    };
+  }
+
+  const total = selected.reduce((sum, transaction) => sum + transaction.amount, 0);
+
+  return {
+    status: "ok" as const,
+    requestedPeriod: {
+      startDate: options.startDate,
+      endDate: options.endDate,
+    },
+    category: options.category,
+    total: Math.round((total + Number.EPSILON) * 100) / 100,
+    transactions: selected.map((transaction) => ({
+      date: transaction.date,
+      description: transaction.description,
+      amount: transaction.amount,
+    })),
+    evidenceScope: {
+      supportsCompositionExplanation: true,
+      supportsBehavioralCause: false,
+      note: "As descrições explicam a composição observada da categoria, não o motivo comportamental do gasto.",
+    },
   };
 }
 
@@ -205,6 +257,7 @@ export function getFinancialDataCapabilities() {
       "cash_flow",
       "savings_rate",
       "expenses_by_category",
+      "category_transactions",
       "largest_expenses",
     ],
     unavailableInCurrentDataset: [

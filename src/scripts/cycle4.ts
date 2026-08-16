@@ -38,6 +38,9 @@ for (const turn of result.turns) {
 console.log("\n--- resposta final ---");
 console.log(result.answer);
 
+console.log("\n--- causal grounding ---");
+console.log(JSON.stringify(result.grounding.causal, null, 2));
+
 console.log("\n--- controle do loop ---");
 console.log(
   JSON.stringify(
