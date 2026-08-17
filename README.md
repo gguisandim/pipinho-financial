@@ -452,3 +452,21 @@ TransactionRepositorySnapshot
 ```
 
 O domínio preserva `metadata.role` (`bank_inflow`, `bank_outflow`, `card_purchase`, `card_credit`) porque o Financial Engine ainda não deve somar conta e cartão ingenuamente. Essa separação será usada no Ciclo 6.4 para evitar dupla contagem de compras e pagamentos de fatura.
+
+## Ciclo 6.4 — Financial Engine real sem dupla contagem
+
+```bash
+npm run cycle6:4
+```
+
+O engine passa a separar três visões dos dados reais:
+
+```text
+liquidity  = movimentos BANK que alteram caixa
+income     = receita confirmada + estimativa de baixa confiança
+spending   = consumo via BANK + compras no cartão
+```
+
+Pagamento de fatura não entra novamente em `spending`, porque a compra no cartão já representa o consumo. Transferências próprias e movimentos de investimento também recebem tratamento separado. Estornos/cashbacks só reduzem spending quando existe evidência suficiente; créditos de cartão ambíguos ficam em diagnóstico.
+
+Por padrão valores monetários continuam ocultos no terminal. Use `FINANCE_ANALYSIS_SHOW_AMOUNTS=true` apenas para inspeção local. Veja `docs/CICLO_6_4.md`.

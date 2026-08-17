@@ -32,6 +32,10 @@ const envSchema = z.object({
   PLUGGY_AUTH_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
   PLUGGY_DATA_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
   FINANCE_TIME_ZONE: z.string().min(1).default("America/Sao_Paulo"),
+  FINANCE_ANALYSIS_SHOW_AMOUNTS: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).default("false"),
+  ),
   // A Pluggy não oferece listagem de Items por segurança. Guardamos os itemIds
   // das autorizações MeuPluggy na configuração da aplicação.
   PLUGGY_ITEM_IDS: optionalEnvString,
