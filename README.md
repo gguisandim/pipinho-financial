@@ -470,3 +470,10 @@ spending   = consumo via BANK + compras no cartão
 Pagamento de fatura não entra novamente em `spending`, porque a compra no cartão já representa o consumo. Transferências próprias e movimentos de investimento também recebem tratamento separado. Estornos/cashbacks só reduzem spending quando existe evidência suficiente; créditos de cartão ambíguos ficam em diagnóstico.
 
 Por padrão valores monetários continuam ocultos no terminal. Use `FINANCE_ANALYSIS_SHOW_AMOUNTS=true` apenas para inspeção local. Veja `docs/CICLO_6_4.md`.
+
+
+## Ciclo 6.4.1 — proteção de qualidade da renda
+
+O engine não publica `savings`/`savings rate` quando não existe renda confirmada ou quando a renda classificada cobre menos de 50% das entradas BANK. Entradas sem semântica suficiente permanecem em `unclassifiedBankInflows`. Isso evita taxas matematicamente válidas, mas semanticamente enganosas.
+
+Veja `docs/CICLO_6_4_1.md`.

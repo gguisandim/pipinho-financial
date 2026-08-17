@@ -2,7 +2,8 @@ import { env } from "../config/env.js";
 import { analyzeFinancialViews } from "../financial-engine/real-views.js";
 import { createPluggyTransactionRepository } from "../integrations/pluggy/pluggy.factory.js";
 
-function money(value: number, show: boolean): string {
+function money(value: number | null, show: boolean): string {
+  if (value === null) return "n/d";
   if (!show) return "(oculto)";
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -45,6 +46,9 @@ async function main() {
   console.log(`Receita confirmada:       ${money(analysis.income.confirmedIncome, showAmounts)} (${analysis.income.confirmedTransactionCount} tx)`);
   console.log(`Receita baixa confiança:  ${money(analysis.income.estimatedIncome, showAmounts)} (${analysis.income.estimatedTransactionCount} tx)`);
   console.log(`Receita total estimada:   ${money(analysis.income.totalIncomeEstimate, showAmounts)}`);
+  console.log(`Entradas BANK não classificadas como renda: ${money(analysis.income.unclassifiedBankInflows, showAmounts)} (${analysis.income.unclassifiedBankInflowCount} tx)`);
+  console.log(`Cobertura das entradas BANK por renda classificada: ${percent(analysis.income.classifiedIncomeShareOfBankInflowsPct)}`);
+  console.log(`Qualidade da renda:       ${analysis.income.quality}`);
 
   console.log("\n--- SPENDING SEM DUPLA CONTAGEM ---");
   console.log(`Gastos via BANK:       ${money(analysis.spending.bankSpending, showAmounts)}`);
@@ -57,6 +61,9 @@ async function main() {
   console.log("\n--- SAVINGS ESTIMADO ---");
   console.log(`Poupança estimada:     ${money(analysis.savings.estimatedSavings, showAmounts)}`);
   console.log(`Savings rate estimado: ${percent(analysis.savings.estimatedSavingsRatePct)}`);
+  if (!analysis.savings.available && analysis.savings.unavailableReason) {
+    console.log(`Motivo:                 ${analysis.savings.unavailableReason}`);
+  }
 
   console.log("\n--- TOP CATEGORIAS DE SPENDING ---");
   for (const entry of analysis.spending.expensesByCategory.slice(0, 10)) {
@@ -79,16 +86,22 @@ async function main() {
     console.log("  aviso: créditos de cartão não reconhecidos como estorno/cashback não foram subtraídos do spending para evitar assumir uma semântica incorreta.");
   }
 
-  if (analysis.diagnostics.lowConfidenceIncomeTransactions > 0) {
-    console.log("  aviso: parte da receita foi inferida apenas pela direção BANK/CREDIT; o savings rate permanece uma estimativa.");
+  if (analysis.income.quality === "insufficient") {
+    console.log("  aviso: nenhuma renda foi confirmada; savings/savings rate foram ocultados para evitar uma estimativa enganosa.");
+  } else if (analysis.income.quality === "partial") {
+    console.log("  aviso: a renda está parcialmente classificada; savings rate deve ser tratado como estimativa.");
   }
 
   if (analysis.diagnostics.otherSpendingPct > 40) {
     console.log("  aviso: muitas despesas continuam em `other`; a qualidade de categorias ainda pode ser melhorada sem alterar a lógica anti-dupla-contagem.");
   }
 
-  console.log("\nCiclo 6.4 concluído: Financial Engine agora separa liquidez, receita e spending real sem somar compra no cartão + pagamento da fatura como duas despesas.");
-  console.log("Próximo passo (Ciclo 7): substituir as tools sintéticas por um FinancialDataService/Repository selecionável e deixar o Agent consultar os dados reais com escopo controlado.");
+  console.log("\nCiclo 6.4.1 concluído: Financial Engine separa liquidez/spending e agora também bloqueia savings rate quando a renda não tem evidência suficiente.");
+  if (analysis.income.quality === "insufficient") {
+    console.log("Antes do Ciclo 7, revise a cobertura de renda acima. O Agent não deve receber um savings rate baseado em renda subdetectada.");
+  } else {
+    console.log("Próximo passo (Ciclo 7): substituir as tools sintéticas por um FinancialDataService/Repository selecionável e deixar o Agent consultar dados reais com escopo controlado.");
+  }
 }
 
 main().catch((error) => {

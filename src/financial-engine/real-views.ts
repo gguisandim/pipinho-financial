@@ -55,6 +55,10 @@ export interface FinancialViewsAnalysis {
     totalIncomeEstimate: number;
     confirmedTransactionCount: number;
     estimatedTransactionCount: number;
+    unclassifiedBankInflows: number;
+    unclassifiedBankInflowCount: number;
+    classifiedIncomeShareOfBankInflowsPct: number | null;
+    quality: "reliable" | "partial" | "insufficient";
     note: string;
   };
   spending: {
@@ -68,8 +72,10 @@ export interface FinancialViewsAnalysis {
     note: string;
   };
   savings: {
-    estimatedSavings: number;
+    available: boolean;
+    estimatedSavings: number | null;
     estimatedSavingsRatePct: number | null;
+    unavailableReason: string | null;
     note: string;
   };
   diagnostics: FinancialViewDiagnostics;
@@ -268,6 +274,26 @@ export function analyzeFinancialViews(
   );
   const totalIncomeEstimate = confirmedIncome + estimatedIncome;
 
+  const unclassifiedBankInflowTransactions = classified.filter(
+    ({ transaction, kind }) =>
+      transaction.metadata?.role === "bank_inflow" && kind === "liquidity_only",
+  );
+  const unclassifiedBankInflows = unclassifiedBankInflowTransactions.reduce(
+    (sum, { transaction }) => sum + transaction.amount,
+    0,
+  );
+
+  const classifiedIncomeShareOfBankInflowsPct =
+    bankInflows > 0 ? (totalIncomeEstimate / bankInflows) * 100 : null;
+
+  const incomeQuality: "reliable" | "partial" | "insufficient" =
+    confirmedIncomeTransactions.length === 0
+      ? "insufficient"
+      : estimatedIncomeTransactions.length === 0 &&
+          (classifiedIncomeShareOfBankInflowsPct ?? 100) >= 50
+        ? "reliable"
+        : "partial";
+
   const spendingTransactions = classified.filter(
     ({ kind }) => kind === "spending",
   );
@@ -322,11 +348,40 @@ export function analyzeFinancialViews(
     ({ kind }) => kind === "unclassified_card_credit",
   ).length;
 
-  const estimatedSavings = totalIncomeEstimate - netSpending;
+  // Savings rate exige duas evidências mínimas:
+  // 1) pelo menos uma entrada de renda confirmada; e
+  // 2) a renda classificada precisa explicar uma parcela material das entradas BANK.
+  // Só exigir uma renda confirmada ainda permitiria um denominador minúsculo diante
+  // de muitas entradas não classificadas, produzindo taxas absurdas.
+  const MIN_CLASSIFIED_INCOME_COVERAGE_PCT = 50;
+  const hasConfirmedIncome = confirmedIncomeTransactions.length > 0;
+  const incomeCoveragePct = classifiedIncomeShareOfBankInflowsPct ?? 0;
+  const savingsAvailable =
+    hasConfirmedIncome &&
+    totalIncomeEstimate > 0 &&
+    incomeCoveragePct >= MIN_CLASSIFIED_INCOME_COVERAGE_PCT;
+
+  const estimatedSavings = savingsAvailable
+    ? totalIncomeEstimate - netSpending
+    : null;
   const estimatedSavingsRatePct =
-    totalIncomeEstimate > 0
+    savingsAvailable && estimatedSavings !== null
       ? (estimatedSavings / totalIncomeEstimate) * 100
       : null;
+
+  let savingsUnavailableReason: string | null = null;
+  if (!savingsAvailable) {
+    if (!hasConfirmedIncome) {
+      savingsUnavailableReason =
+        "Receita insuficientemente identificada: nenhuma entrada de renda confirmada no período.";
+    } else if (incomeCoveragePct < MIN_CLASSIFIED_INCOME_COVERAGE_PCT) {
+      savingsUnavailableReason =
+        `Receita insuficientemente coberta: apenas ${round2(incomeCoveragePct)}% das entradas BANK foram classificadas como renda; mínimo conservador de ${MIN_CLASSIFIED_INCOME_COVERAGE_PCT}%.`;
+    } else {
+      savingsUnavailableReason =
+        "Receita insuficiente para calcular savings rate com segurança.";
+    }
+  }
 
   return {
     period: getPeriod(transactions),
@@ -344,8 +399,15 @@ export function analyzeFinancialViews(
       totalIncomeEstimate: round2(totalIncomeEstimate),
       confirmedTransactionCount: confirmedIncomeTransactions.length,
       estimatedTransactionCount: estimatedIncomeTransactions.length,
+      unclassifiedBankInflows: round2(unclassifiedBankInflows),
+      unclassifiedBankInflowCount: unclassifiedBankInflowTransactions.length,
+      classifiedIncomeShareOfBankInflowsPct:
+        classifiedIncomeShareOfBankInflowsPct === null
+          ? null
+          : round2(classifiedIncomeShareOfBankInflowsPct),
+      quality: incomeQuality,
       note:
-        "Receita confirmada depende de evidência categórica; entradas classificadas apenas pela direção são mantidas separadas como estimativa de baixa confiança.",
+        "Receita confirmada depende de evidência categórica. Entradas classificadas apenas pela direção ficam separadas como baixa confiança; demais BANK/CREDIT permanecem não classificadas em vez de serem tratadas automaticamente como renda.",
     },
     spending: {
       bankSpending: round2(bankSpending),
@@ -359,11 +421,16 @@ export function analyzeFinancialViews(
         "Spending combina compras no cartão e saídas bancárias de consumo, mas exclui pagamento de fatura, transferências próprias, investimentos e financiamento para evitar dupla contagem. Apenas estornos/cashbacks reconhecidos reduzem o gasto líquido.",
     },
     savings: {
-      estimatedSavings: round2(estimatedSavings),
+      available: savingsAvailable,
+      estimatedSavings:
+        estimatedSavings === null ? null : round2(estimatedSavings),
       estimatedSavingsRatePct:
         estimatedSavingsRatePct === null ? null : round2(estimatedSavingsRatePct),
+      unavailableReason: savingsUnavailableReason,
       note:
-        "Estimativa = receita confirmada + receita de baixa confiança - spending líquido. Deve ser interpretada com os diagnósticos de qualidade, não como valor contábil definitivo.",
+        savingsAvailable
+          ? "Estimativa = receita confirmada + receita de baixa confiança - spending líquido. Interprete junto com income.quality."
+          : "Savings foi omitido porque a renda confirmada/cobertura das entradas BANK não atingiu o limiar conservador; publicar uma taxa nesse cenário produziria precisão enganosa.",
     },
     diagnostics: {
       totalTransactions: transactions.length,

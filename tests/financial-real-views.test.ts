@@ -183,6 +183,118 @@ describe("Financial Engine real — cash flow x spending", () => {
     expect(analysis.income.estimatedIncome).toBe(300);
     expect(analysis.income.totalIncomeEstimate).toBe(5300);
     expect(analysis.savings.estimatedSavings).toBe(4300);
+    expect(analysis.savings.available).toBe(true);
+    expect(analysis.income.quality).toBe("partial");
     expect(analysis.diagnostics.lowConfidenceIncomeTransactions).toBe(1);
   });
+
+  it("não publica savings rate quando não há nenhuma renda confirmada", () => {
+    const analysis = analyzeFinancialViews([
+      tx({
+        id: "unknown-inflow",
+        amount: 100,
+        type: "credit",
+        category: "income",
+        metadata: {
+          source: "pluggy",
+          accountType: "BANK",
+          role: "bank_inflow",
+          categorySource: "direction_fallback",
+          status: "posted",
+        },
+      }),
+      tx({
+        id: "expense",
+        amount: 1000,
+        type: "debit",
+        category: "shopping",
+        metadata: {
+          source: "pluggy",
+          accountType: "BANK",
+          role: "bank_outflow",
+          status: "posted",
+        },
+      }),
+    ]);
+
+    expect(analysis.income.quality).toBe("insufficient");
+    expect(analysis.savings.available).toBe(false);
+    expect(analysis.savings.estimatedSavings).toBeNull();
+    expect(analysis.savings.estimatedSavingsRatePct).toBeNull();
+  });
+
+  it("expõe BANK/CREDIT sem semântica como entrada não classificada", () => {
+    const analysis = analyzeFinancialViews([
+      tx({
+        id: "unknown-credit",
+        amount: 700,
+        type: "credit",
+        category: "other",
+        metadata: {
+          source: "pluggy",
+          accountType: "BANK",
+          role: "bank_inflow",
+          categorySource: "fallback",
+          status: "posted",
+        },
+      }),
+    ]);
+
+    expect(analysis.income.unclassifiedBankInflows).toBe(700);
+    expect(analysis.income.unclassifiedBankInflowCount).toBe(1);
+    expect(analysis.income.totalIncomeEstimate).toBe(0);
+    expect(analysis.income.quality).toBe("insufficient");
+  });
+
+  it("não publica savings rate quando há renda confirmada mas a cobertura das entradas BANK é muito baixa", () => {
+    const analysis = analyzeFinancialViews([
+      tx({
+        id: "tiny-confirmed-income",
+        amount: 100,
+        type: "credit",
+        category: "income",
+        metadata: {
+          source: "pluggy",
+          accountType: "BANK",
+          role: "bank_inflow",
+          providerCategory: "Income - Salary",
+          categorySource: "pluggy",
+          status: "posted",
+        },
+      }),
+      tx({
+        id: "large-unclassified-inflow",
+        amount: 9900,
+        type: "credit",
+        category: "other",
+        metadata: {
+          source: "pluggy",
+          accountType: "BANK",
+          role: "bank_inflow",
+          categorySource: "fallback",
+          status: "posted",
+        },
+      }),
+      tx({
+        id: "expense",
+        amount: 1000,
+        type: "debit",
+        category: "shopping",
+        metadata: {
+          source: "pluggy",
+          accountType: "BANK",
+          role: "bank_outflow",
+          status: "posted",
+        },
+      }),
+    ]);
+
+    expect(analysis.income.confirmedIncome).toBe(100);
+    expect(analysis.income.classifiedIncomeShareOfBankInflowsPct).toBe(1);
+    expect(analysis.savings.available).toBe(false);
+    expect(analysis.savings.estimatedSavings).toBeNull();
+    expect(analysis.savings.estimatedSavingsRatePct).toBeNull();
+    expect(analysis.savings.unavailableReason).toContain("coberta");
+  });
+
 });
