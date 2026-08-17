@@ -1,5 +1,7 @@
 import { env, requirePluggyCredentials } from "../../config/env.js";
+import { PluggyApiClient } from "./pluggy-api.client.js";
 import { PluggyAuthClient } from "./pluggy-auth.client.js";
+import { PluggyDataClient } from "./pluggy-data.client.js";
 
 export function createPluggyAuthClient(): PluggyAuthClient {
   const credentials = requirePluggyCredentials();
@@ -12,6 +14,16 @@ export function createPluggyAuthClient(): PluggyAuthClient {
     apiKeyTtlMs: env.PLUGGY_API_KEY_TTL_SECONDS * 1000,
     refreshSkewMs: env.PLUGGY_API_KEY_REFRESH_SKEW_SECONDS * 1000,
   });
+}
+
+export function createPluggyDataClient(): PluggyDataClient {
+  const authClient = createPluggyAuthClient();
+  const apiClient = new PluggyApiClient({
+    baseUrl: env.PLUGGY_BASE_URL,
+    authClient,
+    timeoutMs: env.PLUGGY_DATA_TIMEOUT_MS,
+  });
+  return new PluggyDataClient(apiClient);
 }
 
 export function getPluggyConfigurationStatus(): {

@@ -10,7 +10,9 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 3:** Local Tool Calling: o LLM escolhe funções financeiras e a aplicação executa uma rodada controlada.
 - **Ciclo 4:** Agent Loop multi-turno: o modelo pode usar resultados e erros de tools como feedback, corrigir a estratégia e iterar sob limites explícitos.
 - **Ciclo 5A:** evaluation harness determinístico para medir tools, argumentos, grounding, latência e tokens.
-- **Ciclo 5B:** abstração multi-provider e comparação Groq × Ollama × OpenRouter.
+- **Ciclo 5B:** abstração multi-provider cloud e comparação Groq × OpenRouter.
+- **Ciclo 6.1:** autenticação Pluggy server-side + cache da API Key.
+- **Ciclo 6.2:** leitura real de Items, Accounts e Transactions com paginação por cursor.
 
 Princípio arquitetural:
 
@@ -400,3 +402,32 @@ npm run cycle6:1
 ```
 
 Veja `docs/CICLO_6_1.md`.
+
+## Ciclo 6.2 — dados reais Pluggy
+
+A Pluggy não oferece endpoint para listar Items existentes. Persistimos os `itemId` das autorizações MeuPluggy no `.env`:
+
+```env
+PLUGGY_ITEM_IDS=<nubank-item-id>,<neon-item-id>,<picpay-item-id>
+PLUGGY_ITEM_LABELS=Nubank,Neon,PicPay
+```
+
+Depois:
+
+```bash
+npm run cycle6:2
+```
+
+O script executa, sem LLM:
+
+```text
+GET /items/{id}
+    ↓
+GET /accounts?itemId=...
+    ↓
+GET /v2/transactions?accountId=...
+    ↓
+segue `next` até o fim
+```
+
+Por padrão IDs, números de conta, saldos e amostras sensíveis são mascarados/ocultados. Veja `docs/CICLO_6_2.md`.

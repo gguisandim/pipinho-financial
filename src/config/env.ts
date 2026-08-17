@@ -30,6 +30,24 @@ const envSchema = z.object({
   PLUGGY_CLIENT_SECRET: optionalEnvString,
   PLUGGY_BASE_URL: z.string().url().default("https://api.pluggy.ai"),
   PLUGGY_AUTH_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
+  PLUGGY_DATA_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+  // A Pluggy não oferece listagem de Items por segurança. Guardamos os itemIds
+  // das autorizações MeuPluggy na configuração da aplicação.
+  PLUGGY_ITEM_IDS: optionalEnvString,
+  // Labels locais, na mesma ordem dos IDs (ex.: Nubank,Neon,PicPay).
+  PLUGGY_ITEM_LABELS: optionalEnvString,
+  // Ciclo 6.2 pode restringir a janela; vazio = todo o histórico disponível.
+  PLUGGY_TRANSACTION_DATE_FROM: optionalEnvString,
+  PLUGGY_TRANSACTION_DATE_TO: optionalEnvString,
+  PLUGGY_MAX_TRANSACTION_PAGES: z.coerce.number().int().min(1).max(100).default(25),
+  PLUGGY_DISCOVERY_SHOW_SAMPLES: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).default("false"),
+  ),
+  PLUGGY_DISCOVERY_SHOW_AMOUNTS: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).default("false"),
+  ),
   // A documentação da Pluggy informa validade de 2h para a API Key.
   // Renovamos alguns minutos antes para evitar usar uma chave no limite.
   PLUGGY_API_KEY_TTL_SECONDS: z.coerce.number().int().min(60).default(7200),
@@ -89,4 +107,27 @@ export function requirePluggyCredentials(): {
     clientId: env.PLUGGY_CLIENT_ID as string,
     clientSecret: env.PLUGGY_CLIENT_SECRET as string,
   };
+}
+
+export interface PluggyItemReference {
+  itemId: string;
+  label?: string;
+}
+
+function splitCsv(value?: string): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function getPluggyItemReferences(): PluggyItemReference[] {
+  const ids = splitCsv(env.PLUGGY_ITEM_IDS);
+  const labels = splitCsv(env.PLUGGY_ITEM_LABELS);
+
+  return ids.map((itemId, index) => ({
+    itemId,
+    label: labels[index],
+  }));
 }
