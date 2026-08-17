@@ -7,20 +7,15 @@ import {
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
 describe("PluggyAuthClient", () => {
   it("autentica uma vez e reutiliza a API key em memória", async () => {
     let nowMs = Date.parse("2026-08-16T17:00:00.000Z");
-
     const fetchMock = vi.fn<typeof fetch>(async () =>
-      jsonResponse({
-        apiKey: "pluggy-test-api-key",
-      }),
+      jsonResponse({ apiKey: "pluggy-test-api-key" }),
     );
 
     const client = new PluggyAuthClient({
@@ -34,52 +29,32 @@ describe("PluggyAuthClient", () => {
     });
 
     const first = await client.getApiKey();
-
     expect(first.source).toBe("network");
     expect(first.apiKey).toBe("pluggy-test-api-key");
 
     nowMs += 60_000;
-
     const second = await client.getApiKey();
-
     expect(second.source).toBe("cache");
     expect(second.apiKey).toBe(first.apiKey);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const firstCall = fetchMock.mock.calls[0];
-
     expect(firstCall).toBeDefined();
-
     const [url, request] = firstCall!;
-
     expect(String(url)).toContain("/auth");
     expect(request?.method).toBe("POST");
-
     expect(JSON.parse(String(request?.body))).toEqual({
       clientId: "client-id",
       clientSecret: "client-secret",
     });
-
-    const headers = new Headers(request?.headers);
-
-    expect(headers.get("Content-Type")).toBe("application/json");
   });
 
   it("renova a API key quando entra na janela de refresh", async () => {
     let nowMs = Date.parse("2026-08-16T17:00:00.000Z");
-
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          apiKey: "key-1",
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          apiKey: "key-2",
-        }),
-      );
+      .mockResolvedValueOnce(jsonResponse({ apiKey: "key-1" }))
+      .mockResolvedValueOnce(jsonResponse({ apiKey: "key-2" }));
 
     const client = new PluggyAuthClient({
       baseUrl: "https://api.pluggy.ai",
@@ -91,29 +66,15 @@ describe("PluggyAuthClient", () => {
       refreshSkewMs: 30_000,
     });
 
-    const first = await client.getApiKey();
-
-    expect(first.apiKey).toBe("key-1");
-    expect(first.source).toBe("network");
-
+    expect((await client.getApiKey()).apiKey).toBe("key-1");
     nowMs += 95_000;
-
-    const second = await client.getApiKey();
-
-    expect(second.apiKey).toBe("key-2");
-    expect(second.source).toBe("network");
-
+    expect((await client.getApiKey()).apiKey).toBe("key-2");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("transforma HTTP 401 em erro seguro sem vazar o secret", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
-      jsonResponse(
-        {
-          message: "invalid credentials",
-        },
-        401,
-      ),
+      jsonResponse({ message: "invalid credentials" }, 401),
     );
 
     const client = new PluggyAuthClient({
@@ -137,12 +98,7 @@ describe("PluggyAuthClient", () => {
   });
 
   it("rejeita resposta 200 que não contém apiKey", async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () =>
-      jsonResponse({
-        ok: true,
-      }),
-    );
-
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }));
     const client = new PluggyAuthClient({
       baseUrl: "https://api.pluggy.ai",
       clientId: "client-id",

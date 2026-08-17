@@ -1,7 +1,8 @@
-import { env, requirePluggyCredentials } from "../../config/env.js";
+import { env, getPluggyItemReferences, requirePluggyCredentials } from "../../config/env.js";
 import { PluggyApiClient } from "./pluggy-api.client.js";
 import { PluggyAuthClient } from "./pluggy-auth.client.js";
 import { PluggyDataClient } from "./pluggy-data.client.js";
+import { PluggyTransactionRepository } from "../../repositories/pluggy-transaction.repository.js";
 
 export function createPluggyAuthClient(): PluggyAuthClient {
   const credentials = requirePluggyCredentials();
@@ -24,6 +25,21 @@ export function createPluggyDataClient(): PluggyDataClient {
     timeoutMs: env.PLUGGY_DATA_TIMEOUT_MS,
   });
   return new PluggyDataClient(apiClient);
+}
+
+export function createPluggyTransactionRepository(): PluggyTransactionRepository {
+  const references = getPluggyItemReferences();
+  if (references.length === 0) {
+    throw new Error(
+      "PLUGGY_ITEM_IDS não configurado. Adicione os itemIds autorizados antes de criar o repositório Pluggy.",
+    );
+  }
+
+  return new PluggyTransactionRepository(createPluggyDataClient(), {
+    itemReferences: references,
+    maxPages: env.PLUGGY_MAX_TRANSACTION_PAGES,
+    timeZone: env.FINANCE_TIME_ZONE,
+  });
 }
 
 export function getPluggyConfigurationStatus(): {

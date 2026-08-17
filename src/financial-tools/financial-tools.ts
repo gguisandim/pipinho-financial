@@ -36,6 +36,7 @@ const categorySchema = z.enum([
   "education",
   "fitness",
   "shopping",
+  "other",
 ]);
 
 const spendingSchema = z
@@ -155,6 +156,7 @@ export const financialToolDefinitions: ToolDefinition[] = [
               "education",
               "fitness",
                   "shopping",
+                  "other",
                 ],
               },
               { type: "null" },
@@ -200,6 +202,7 @@ export const financialToolDefinitions: ToolDefinition[] = [
               "education",
               "fitness",
               "shopping",
+              "other",
             ],
             description: "Categoria financeira canônica obrigatória.",
           },

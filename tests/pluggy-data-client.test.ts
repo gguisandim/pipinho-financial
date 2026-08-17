@@ -6,9 +6,7 @@ import { PluggyDataClient } from "../src/integrations/pluggy/pluggy-data.client.
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -20,7 +18,6 @@ function fakeAuthClient() {
       createdAt: new Date("2026-08-16T20:00:00Z"),
       expiresAt: new Date("2026-08-16T22:00:00Z"),
     })),
-
     clearCache: vi.fn(),
   } as unknown as PluggyAuthClient;
 }
@@ -49,7 +46,6 @@ describe("PluggyDataClient", () => {
       authClient: fakeAuthClient(),
       fetchImpl: fetchMock,
     });
-
     const client = new PluggyDataClient(api);
 
     const accounts = await client.fetchAccounts("item-1");
@@ -58,15 +54,11 @@ describe("PluggyDataClient", () => {
     expect(accounts[0]?.type).toBe("BANK");
 
     const firstCall = fetchMock.mock.calls[0];
-
     expect(firstCall).toBeDefined();
-
     const [url, request] = firstCall!;
 
     expect(String(url)).toContain("/accounts?itemId=item-1");
-
     const headers = new Headers(request?.headers);
-
     expect(headers.get("X-API-KEY")).toBe("api-key");
   });
 
@@ -113,7 +105,6 @@ describe("PluggyDataClient", () => {
       authClient: fakeAuthClient(),
       fetchImpl: fetchMock,
     });
-
     const client = new PluggyDataClient(api);
 
     const result = await client.fetchAllTransactions("account-1", {
@@ -121,27 +112,20 @@ describe("PluggyDataClient", () => {
       maxPages: 10,
     });
 
-    expect(result.transactions.map((tx) => tx.id)).toEqual([
-      "tx-1",
-      "tx-2",
-    ]);
-
+    expect(result.transactions.map((tx) => tx.id)).toEqual(["tx-1", "tx-2"]);
     expect(result.pages).toBe(2);
     expect(result.truncated).toBe(false);
 
     const firstCall = fetchMock.mock.calls[0];
     const secondCall = fetchMock.mock.calls[1];
-
     expect(firstCall).toBeDefined();
     expect(secondCall).toBeDefined();
 
     const [firstUrl] = firstCall!;
     const [secondUrl] = secondCall!;
-
     expect(String(firstUrl)).toContain(
       "/v2/transactions?accountId=account-1&dateFrom=2026-08-01",
     );
-
     expect(String(secondUrl)).toContain(
       "/v2/transactions?accountId=account-1&after=cursor-2",
     );
@@ -171,13 +155,9 @@ describe("PluggyDataClient", () => {
       authClient: fakeAuthClient(),
       fetchImpl: fetchMock,
     });
-
     const client = new PluggyDataClient(api);
 
-    const result = await client.fetchAllTransactions("account-1", {
-      maxPages: 1,
-    });
-
+    const result = await client.fetchAllTransactions("account-1", { maxPages: 1 });
     expect(result.pages).toBe(1);
     expect(result.truncated).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);

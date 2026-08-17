@@ -13,6 +13,7 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 5B:** abstração multi-provider cloud e comparação Groq × OpenRouter.
 - **Ciclo 6.1:** autenticação Pluggy server-side + cache da API Key.
 - **Ciclo 6.2:** leitura real de Items, Accounts e Transactions com paginação por cursor.
+- **Ciclo 6.3:** `TransactionRepository` + mapper Pluggy → domínio, preservando BANK/CREDIT, status, origem e evidência de categoria.
 
 Princípio arquitetural:
 
@@ -247,7 +248,6 @@ Esse comportamento foi implementado no **Ciclo 4: Agent Loop**.
 
 ## Ainda fora do escopo
 
-- Pluggy / Open Finance real
 - PostgreSQL
 - autenticação
 - RAG
@@ -431,3 +431,24 @@ segue `next` até o fim
 ```
 
 Por padrão IDs, números de conta, saldos e amostras sensíveis são mascarados/ocultados. Veja `docs/CICLO_6_2.md`.
+
+
+## Ciclo 6.3 — Repository + Mapper
+
+```bash
+npm run cycle6:3
+```
+
+O script lê os mesmos Items do Ciclo 6.2, converte as transações para o domínio da aplicação e imprime apenas métricas de mapeamento. Valores monetários não são exibidos.
+
+```text
+Pluggy Transaction
+       ↓
+PluggyTransactionMapper
+       ↓
+Domain Transaction
+       ↓
+TransactionRepositorySnapshot
+```
+
+O domínio preserva `metadata.role` (`bank_inflow`, `bank_outflow`, `card_purchase`, `card_credit`) porque o Financial Engine ainda não deve somar conta e cartão ingenuamente. Essa separação será usada no Ciclo 6.4 para evitar dupla contagem de compras e pagamentos de fatura.
