@@ -31,6 +31,8 @@ const envSchema = z.object({
   PLUGGY_BASE_URL: z.string().url().default("https://api.pluggy.ai"),
   PLUGGY_AUTH_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
   PLUGGY_DATA_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+  PLUGGY_REQUEST_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  PLUGGY_RETRY_BASE_MS: z.coerce.number().int().min(100).max(10000).default(500),
   FINANCE_TIME_ZONE: z.string().min(1).default("America/Sao_Paulo"),
   FINANCE_ANALYSIS_SHOW_AMOUNTS: z.preprocess(
     (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
@@ -48,6 +50,8 @@ const envSchema = z.object({
   ENRICHMENT_MIN_OCCURRENCES: z.coerce.number().int().min(1).max(50).default(2),
   ENRICHMENT_MAX_EXPENSE_GROUPS: z.coerce.number().int().min(1).max(50).default(12),
   ENRICHMENT_MAX_INFLOW_GROUPS: z.coerce.number().int().min(1).max(50).default(12),
+  ENRICHMENT_BATCH_SIZE: z.coerce.number().int().min(1).max(12).default(4),
+  ENRICHMENT_MAX_COMPLETION_TOKENS: z.coerce.number().int().min(500).max(8000).default(2400),
   // A Pluggy não oferece listagem de Items por segurança. Guardamos os itemIds
   // das autorizações MeuPluggy na configuração da aplicação.
   PLUGGY_ITEM_IDS: optionalEnvString,

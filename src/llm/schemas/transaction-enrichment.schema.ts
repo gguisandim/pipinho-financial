@@ -19,7 +19,7 @@ export const ExpenseEnrichmentSuggestionSchema = z.object({
   candidateId: z.string().min(1),
   category: ExpenseEnrichmentCategorySchema,
   confidence: z.enum(["low", "medium", "high"]),
-  reason: z.string().min(1).max(220),
+  reason: z.string().min(1).max(140),
 });
 
 export const ExpenseEnrichmentBatchSchema = z.object({

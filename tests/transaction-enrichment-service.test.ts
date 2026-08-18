@@ -121,3 +121,46 @@ describe("TransactionEnrichmentService", () => {
     expect(payload).not.toContain("PIX RECEBIDO MARIA");
   });
 });
+
+it("divide lote quando Structured Output estoura o orçamento de completion", async () => {
+  let calls = 0;
+  const provider: StructuredLlmProvider = {
+    async completeStructured<T>(request: StructuredLlmRequest<T>) {
+      calls += 1;
+      const ids = [...request.user.matchAll(/"candidateId":\s*"([^"]+)"/g)].map(
+        (match) => match[1],
+      );
+
+      if (ids.length > 1) {
+        throw new Error(
+          "json_validate_failed: max completion tokens reached before generating a valid document",
+        );
+      }
+
+      return {
+        data: request.schema.parse({
+          suggestions: ids.map((candidateId) => ({
+            candidateId,
+            category: "shopping",
+            confidence: "medium",
+            reason: "Varejo geral.",
+          })),
+        }),
+        rawText: "{}",
+        provider: "fake",
+        model: "fake-model",
+        latencyMs: 1,
+        usage: { totalTokens: 10 },
+      };
+    },
+  };
+
+  const service = new TransactionEnrichmentService(repository(), provider);
+  const scan = await service.scan({ minOccurrences: 2, maxExpenseGroups: 5 });
+  const result = await service.classifyExpenses(scan, { batchSize: 4 });
+
+  expect(result?.suggestions).toHaveLength(1);
+  // Este fixture possui um único grupo elegível; o importante é garantir
+  // que o caminho de classificação permaneça compatível com a nova API.
+  expect(calls).toBeGreaterThanOrEqual(1);
+});

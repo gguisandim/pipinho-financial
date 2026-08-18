@@ -27,7 +27,8 @@ REGRAS DE SEGURANÇA/QUALIDADE:
 - Use confidence=high apenas quando o texto indicar fortemente uma única categoria.
 - Use confidence=medium quando houver boa evidência, mas não certeza total.
 - Use confidence=low junto com category=other quando a evidência for fraca.
-- Retorne exatamente uma sugestão para cada candidateId recebido, sem criar IDs novos.`;
+- Retorne exatamente uma sugestão para cada candidateId recebido, sem criar IDs novos.
+- reason deve ser curto, objetivo e ter no máximo 12 palavras.`;
 
 export function buildTransactionEnrichmentPrompt(candidates: EnrichmentCandidate[]) {
   return `Classifique os candidatos abaixo. Nenhum valor monetário, accountId, itemId ou data foi enviado.

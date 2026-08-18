@@ -23,6 +23,8 @@ export function createPluggyDataClient(): PluggyDataClient {
     baseUrl: env.PLUGGY_BASE_URL,
     authClient,
     timeoutMs: env.PLUGGY_DATA_TIMEOUT_MS,
+    maxRetries: env.PLUGGY_REQUEST_RETRIES,
+    retryBaseMs: env.PLUGGY_RETRY_BASE_MS,
   });
   return new PluggyDataClient(apiClient);
 }

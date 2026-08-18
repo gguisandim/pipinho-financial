@@ -41,8 +41,13 @@ for (const turn of result.turns) {
         tool.result && typeof tool.result === "object" && !Array.isArray(tool.result)
           ? (tool.result as Record<string, unknown>)
           : {};
+      const code = resultObject.code ? ` code=${String(resultObject.code)}` : "";
+      const message =
+        tool.outcome === "rejected" && resultObject.message
+          ? ` | ${String(resultObject.message)}`
+          : "";
       console.log(
-        `    resultado: status=${String(resultObject.status ?? "ok")} source=${String(resultObject.source ?? "local")}`,
+        `    resultado: status=${String(resultObject.status ?? "ok")} source=${String(resultObject.source ?? "local")}${code}${message}`,
       );
     }
   }

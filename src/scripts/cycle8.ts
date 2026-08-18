@@ -40,14 +40,19 @@ console.log(`LLM para despesas: ${noLlm ? "desativado" : "Groq Structured Output
 console.log("LLM para entradas BANK: desativado por padrão (human-in-the-loop)");
 console.log(`Descrições no terminal/relatório: ${showDescriptions ? "visíveis localmente" : "ocultadas"}`);
 console.log(`Mín. ocorrências por grupo: ${minOccurrences}`);
-console.log(`Máx. grupos de despesas enviados ao LLM: ${maxExpenseGroups}\n`);
+console.log(`Máx. grupos de despesas enviados ao LLM: ${maxExpenseGroups}`);
+console.log(`Tamanho de lote LLM: ${env.ENRICHMENT_BATCH_SIZE}`);
+console.log(`Máx. completion tokens/lote: ${env.ENRICHMENT_MAX_COMPLETION_TOKENS}\n`);
 
 const scan = await service.scan({
   minOccurrences,
   maxExpenseGroups,
   maxInflowGroups,
 });
-const classification = await service.classifyExpenses(scan);
+const classification = await service.classifyExpenses(scan, {
+  batchSize: env.ENRICHMENT_BATCH_SIZE,
+  maxCompletionTokens: env.ENRICHMENT_MAX_COMPLETION_TOKENS,
+});
 
 const totalOtherTransactions = scan.expenseCandidates.reduce(
   (sum, candidate) => sum + candidate.occurrenceCount,
@@ -100,7 +105,7 @@ if (!classification) {
   );
 } else {
   console.log(
-    `Provider/modelo: ${classification.provider}/${classification.model} | ${classification.latencyMs} ms | ${classification.usage.totalTokens ?? "n/d"} tokens`,
+    `Provider/modelo: ${classification.provider}/${classification.model} | ${classification.batchCount} lote(s) | ${classification.latencyMs} ms | ${classification.usage.totalTokens ?? "n/d"} tokens`,
   );
   for (const suggestion of classification.suggestions) {
     const reason = showDescriptions ? ` | ${suggestion.reason}` : "";

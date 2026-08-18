@@ -172,7 +172,6 @@ export class AgenticFinancialService {
               "Use o resultado anterior, mude os argumentos ou escolha outra ferramenta.",
           };
         } else {
-          seenCalls.add(signature);
           const execution = this.options.toolExecutor
             ? await executeFinancialToolSafelyAsync({
                 question,
@@ -189,6 +188,17 @@ export class AgenticFinancialService {
               });
           outcome = execution.status;
           result = execution.result;
+
+          // Só bloqueia repetição quando a chamada realmente executou ou quando
+          // a rejeição foi determinística. Erros de execução (rede/5xx/timeout)
+          // podem ser transitórios e precisam poder ser tentados novamente.
+          const code =
+            result && typeof result === "object" && !Array.isArray(result)
+              ? (result as { code?: string }).code
+              : undefined;
+          if (outcome === "executed" || code !== "execution_error") {
+            seenCalls.add(signature);
+          }
         }
 
         tools.push({

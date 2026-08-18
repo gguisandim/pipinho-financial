@@ -6,6 +6,7 @@ export interface StructuredLlmRequest<T> {
   user: string;
   schemaName: string;
   schema: z.ZodType<T>;
+  maxCompletionTokens?: number;
 }
 
 export interface StructuredLlmResponse<T> {

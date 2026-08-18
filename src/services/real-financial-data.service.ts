@@ -37,7 +37,17 @@ export class RealFinancialDataService {
   constructor(private readonly repository: TransactionRepository) {}
 
   private snapshot(): Promise<TransactionRepositorySnapshot> {
-    this.snapshotPromise ??= this.repository.listTransactions({ includePending: false });
+    if (!this.snapshotPromise) {
+      this.snapshotPromise = this.repository
+        .listTransactions({ includePending: false })
+        .catch((error) => {
+          // Não envenena o cache com uma Promise rejeitada. Uma falha transitória
+          // da Pluggy pode ser tentada novamente na próxima iteração do Agent.
+          this.snapshotPromise = null;
+          throw error;
+        });
+    }
+
     return this.snapshotPromise;
   }
 

@@ -95,3 +95,69 @@ describe("AgenticFinancialService com executor real injetado", () => {
     expect(agent.requests[0]?.messages[0]?.content).toBe("prompt real");
   });
 });
+
+class RetrySameToolAgent implements ToolCallingLlmProvider {
+  private turn = 0;
+
+  async completeWithTools(): Promise<ToolCallingTurnResponse> {
+    this.turn += 1;
+    if (this.turn <= 2) {
+      return {
+        text: null,
+        toolCalls: [
+          {
+            id: `retry-${this.turn}`,
+            type: "function",
+            function: { name: "get_financial_period", arguments: "{}" },
+          },
+        ],
+        finishReason: "tool_calls",
+        provider: "fake",
+        model: "fake",
+        latencyMs: 1,
+        usage: {},
+      };
+    }
+
+    return {
+      text: "Período recuperado após uma falha transitória.",
+      toolCalls: [],
+      finishReason: "stop",
+      provider: "fake",
+      model: "fake",
+      latencyMs: 1,
+      usage: {},
+    };
+  }
+}
+
+describe("AgenticFinancialService retry de execution_error", () => {
+  it("permite repetir a mesma tool após falha transitória", async () => {
+    let calls = 0;
+    const service = new AgenticFinancialService(new RetrySameToolAgent(), fallback, {
+      referenceDate: "2026-08-18",
+      toolDefinitions: [
+        {
+          type: "function",
+          function: {
+            name: "get_financial_period",
+            description: "teste",
+            parameters: { type: "object", properties: {}, additionalProperties: false },
+          },
+        },
+      ],
+      toolExecutor: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("timeout transitório");
+        return { status: "ok", source: "pluggy", start: "2025-08-16", end: "2026-08-14" };
+      },
+      systemPromptBuilder: () => "prompt real",
+    });
+
+    const result = await service.answer("Analise meu fluxo financeiro");
+    expect(calls).toBe(2);
+    expect(result.toolCalls[0]?.outcome).toBe("rejected");
+    expect((result.toolCalls[0]?.result as { code?: string }).code).toBe("execution_error");
+    expect(result.toolCalls[1]?.outcome).toBe("executed");
+  });
+});

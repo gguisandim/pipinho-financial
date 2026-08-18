@@ -23,7 +23,7 @@ export class GroqStructuredProvider implements StructuredLlmProvider {
     const completion = await this.client.chat.completions.create({
       model: env.GROQ_STRUCTURED_MODEL,
       temperature: 0,
-      max_completion_tokens: 1200,
+      max_completion_tokens: request.maxCompletionTokens ?? 2400,
       messages: [
         { role: "system", content: request.system },
         { role: "user", content: request.user },
