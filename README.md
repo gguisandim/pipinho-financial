@@ -15,7 +15,8 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 6.2:** leitura real de Items, Accounts e Transactions com paginação por cursor.
 - **Ciclo 6.3:** `TransactionRepository` + mapper Pluggy → domínio, preservando BANK/CREDIT, status, origem e evidência de categoria.
 - **Ciclo 6.4:** views financeiras reais de liquidez/spending com proteção contra dupla contagem e quality guards de renda/savings.
-- **Ciclo 7:** Real Financial Agent: tool calling sobre `PluggyTransactionRepository` com quality grounding e sem enviar o extrato completo ao LLM.
+- **Ciclo 7:** Real Financial Agent: tool calling sobre `PluggyTransactionRepository` com quality/provenance grounding e sem enviar o extrato completo ao LLM.
+- **Ciclo 8:** Data Enrichment: agrupamento/sanitização de `other`, sugestões de categoria via Structured Outputs e revisão humana obrigatória para renda.
 
 Princípio arquitetural:
 
@@ -497,3 +498,19 @@ npm run cycle7 -- --provider openrouter "Compare meus gastos por instituição"
 O agent real usa o mesmo loop dos ciclos anteriores, mas recebe `realFinancialToolDefinitions` e um executor assíncrono ligado ao `PluggyTransactionRepository`. O repository é carregado uma vez por resposta e as tools trabalham sobre esse snapshot.
 
 O LLM não recebe o extrato completo. Tools agregadas retornam apenas métricas necessárias; tools detalhadas possuem limite de registros. Se `savings.available=false` ou `income.quality=insufficient`, o quality grounding impede que a resposta publique métricas não sustentadas.
+
+## Ciclo 8 — Data Enrichment
+
+```bash
+npm run enrichment:scan
+npm run cycle8
+```
+
+O Ciclo 8 não envia valores, `accountId`, `itemId`, datas nem entradas bancárias ao classificador remoto. Despesas repetidas em `other` são agrupadas e sanitizadas antes de uma sugestão estruturada de categoria. As sugestões são gravadas com `approved: false` e **não alteram automaticamente o domínio financeiro**. Entradas BANK continuam em revisão humana para evitar transformar PIX/transferências em renda por inferência.
+
+Para inspecionar descrições sanitizadas somente no terminal local:
+
+```bash
+npm run cycle8 -- --show-descriptions
+```
+

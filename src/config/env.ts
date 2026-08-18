@@ -36,6 +36,18 @@ const envSchema = z.object({
     (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
     z.enum(["true", "false"]).default("false"),
   ),
+  // Ciclo 8 — enriquecimento minimizado de categorias.
+  ENRICHMENT_USE_LLM: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).default("true"),
+  ),
+  ENRICHMENT_SHOW_DESCRIPTIONS: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).default("false"),
+  ),
+  ENRICHMENT_MIN_OCCURRENCES: z.coerce.number().int().min(1).max(50).default(2),
+  ENRICHMENT_MAX_EXPENSE_GROUPS: z.coerce.number().int().min(1).max(50).default(12),
+  ENRICHMENT_MAX_INFLOW_GROUPS: z.coerce.number().int().min(1).max(50).default(12),
   // A Pluggy não oferece listagem de Items por segurança. Guardamos os itemIds
   // das autorizações MeuPluggy na configuração da aplicação.
   PLUGGY_ITEM_IDS: optionalEnvString,

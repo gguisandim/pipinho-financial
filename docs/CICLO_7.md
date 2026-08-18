@@ -45,9 +45,9 @@ O `AgenticFinancialService` continua sendo o mesmo do benchmark. O Ciclo 7 injet
 - `get_spending_by_institution`
 - `get_data_capabilities`
 
-## Quality grounding
+## Quality + provenance grounding
 
-Além do causal grounding, o Agent agora possui validação determinística para impedir claims incompatíveis com a qualidade do backend.
+Além do causal grounding, o Agent possui validações determinísticas para impedir claims incompatíveis com a qualidade do backend e com a proveniência das métricas.
 
 Exemplo de tool:
 
@@ -63,6 +63,8 @@ Exemplo de tool:
 ```
 
 Uma resposta como `Sua taxa de poupança é 40%` é bloqueada e passa por repair antes de chegar ao usuário.
+
+O provenance grounding também impede atribuir ao Pluggy decisões que pertencem ao Financial Engine, chamar agregações completas de categoria de "amostras" e expor nomes internos de tools na resposta final.
 
 ## Execução
 
@@ -101,5 +103,6 @@ Com a qualidade observada no Ciclo 6.4.1, as perguntas de savings/renda devem re
 - Nenhuma fixture sintética é consultada pelas tools reais.
 - Spending mantém proteção anti-dupla-contagem.
 - Quality grounding passa para respostas com renda/savings indisponíveis.
+- Provenance grounding evita atribuição incorreta ao provider e exposição de nomes internos de tools.
 - Instituição financeira pode ser consultada sem confundi-la com categoria.
 - Extrato completo não é incluído no prompt do LLM.

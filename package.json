@@ -1,6 +1,6 @@
 {
   "name": "finance-llm-lab",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -27,7 +27,10 @@
     "cycle6:4": "tsx src/scripts/cycle6-4.ts",
     "finance:analyze": "tsx src/scripts/cycle6-4.ts",
     "cycle7": "tsx src/scripts/cycle7.ts",
-    "agent:real": "tsx src/scripts/cycle7.ts"
+    "agent:real": "tsx src/scripts/cycle7.ts",
+    "cycle8": "tsx src/scripts/cycle8.ts",
+    "enrichment:scan": "tsx src/scripts/cycle8.ts --no-llm",
+    "enrichment:classify": "tsx src/scripts/cycle8.ts"
   },
   "dependencies": {
     "dotenv": "latest",

@@ -8,6 +8,10 @@ import {
   sanitizeFinancialQualityGrounding,
 } from "../agent/financial-quality-grounding.js";
 import {
+  evaluateFinancialProvenanceGrounding,
+  sanitizeFinancialProvenanceGrounding,
+} from "../agent/financial-provenance-grounding.js";
+import {
   executeFinancialToolSafely,
   executeFinancialToolSafelyAsync,
   type FinancialToolExecutor,
@@ -37,6 +41,10 @@ import {
   FINANCIAL_QUALITY_REPAIR_SYSTEM_PROMPT,
   buildFinancialQualityRepairPrompt,
 } from "../llm/prompts/financial-quality-repair.prompt.js";
+import {
+  FINANCIAL_PROVENANCE_REPAIR_SYSTEM_PROMPT,
+  buildFinancialProvenanceRepairPrompt,
+} from "../llm/prompts/financial-provenance-repair.prompt.js";
 
 function parseArgumentsForTrace(rawArguments: string): unknown {
   try {
@@ -215,6 +223,12 @@ export class AgenticFinancialService {
       usage: LlmUsage;
       applied: boolean;
     } | null = null;
+    let provenanceRepair: {
+      model: string;
+      latencyMs: number;
+      usage: LlmUsage;
+      applied: boolean;
+    } | null = null;
     let causalGrounding = answer
       ? evaluateCausalGrounding(answer, tools)
       : { passed: true, violations: [] };
@@ -300,6 +314,53 @@ export class AgenticFinancialService {
       }
     }
 
+    let provenanceGrounding = answer
+      ? evaluateFinancialProvenanceGrounding(answer, tools)
+      : { passed: true, violations: [] };
+
+    if (answer && !provenanceGrounding.passed) {
+      const repair = await this.fallbackLlm.complete({
+        system: FINANCIAL_PROVENANCE_REPAIR_SYSTEM_PROMPT,
+        user: buildFinancialProvenanceRepairPrompt({
+          question,
+          answer,
+          violations: provenanceGrounding.violations,
+          tools,
+        }),
+      });
+
+      provenanceRepair = {
+        model: repair.model,
+        latencyMs: repair.latencyMs,
+        usage: repair.usage,
+        applied: true,
+      };
+
+      const repairedText = repair.text?.trim();
+      if (repairedText) {
+        const repairedEvaluation = evaluateFinancialProvenanceGrounding(
+          repairedText,
+          tools,
+        );
+        if (repairedEvaluation.passed) {
+          answer = repairedText;
+          provenanceGrounding = repairedEvaluation;
+        } else {
+          answer = sanitizeFinancialProvenanceGrounding(
+            repairedText,
+            repairedEvaluation.violations,
+          );
+          provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
+        }
+      } else {
+        answer = sanitizeFinancialProvenanceGrounding(
+          answer,
+          provenanceGrounding.violations,
+        );
+        provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
+      }
+    }
+
     if (!answer) {
       termination ??= "max_iterations_fallback";
 
@@ -331,6 +392,14 @@ export class AgenticFinancialService {
         );
         qualityGrounding = evaluateFinancialQualityGrounding(answer, tools);
       }
+      provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
+      if (!provenanceGrounding.passed) {
+        answer = sanitizeFinancialProvenanceGrounding(
+          answer,
+          provenanceGrounding.violations,
+        );
+        provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
+      }
 
       return {
         question,
@@ -350,6 +419,11 @@ export class AgenticFinancialService {
             passed: qualityGrounding.passed,
             repaired: false,
             violations: qualityGrounding.violations,
+          },
+          provenance: {
+            passed: provenanceGrounding.passed,
+            repaired: false,
+            violations: provenanceGrounding.violations,
           },
         },
         llm: {
@@ -388,21 +462,29 @@ export class AgenticFinancialService {
           repaired: qualityRepair !== null,
           violations: qualityGrounding.violations,
         },
+        provenance: {
+          passed: provenanceGrounding.passed,
+          repaired: provenanceRepair !== null,
+          violations: provenanceGrounding.violations,
+        },
       },
       llm: {
         agentModel: turns.at(-1)?.model ?? "unknown",
         fallback: null,
         groundingRepair,
         qualityRepair,
+        provenanceRepair,
         total: {
           latencyMs:
             turns.reduce((total, turn) => total + turn.latencyMs, 0) +
             (groundingRepair?.latencyMs ?? 0) +
-            (qualityRepair?.latencyMs ?? 0),
+            (qualityRepair?.latencyMs ?? 0) +
+            (provenanceRepair?.latencyMs ?? 0),
           usage: usageSum([
             ...turns.map((turn) => turn.usage),
             ...(groundingRepair ? [groundingRepair.usage] : []),
             ...(qualityRepair ? [qualityRepair.usage] : []),
+            ...(provenanceRepair ? [provenanceRepair.usage] : []),
           ]),
         },
       },

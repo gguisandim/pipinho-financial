@@ -89,6 +89,8 @@ export class RealFinancialDataService {
       evidenceScope: {
         cashFlowIsBankLiquidity: true,
         spendingAvoidsCreditCardDoubleCount: true,
+        doubleCountHandledBy: "financial_engine",
+        categoryQualityUsesFullClassifiedSet: true,
         savingsMustRespectAvailableFlag: true,
         rawTransactionsSentToLlm: false,
       },
@@ -174,6 +176,8 @@ export class RealFinancialDataService {
       evidenceScope: {
         supportsQuantitativeComparison: true,
         supportsBehavioralCause: false,
+        aggregationScope: "all_classified_transactions_in_period",
+        sampleLimited: false,
         categoryTotalsAreGrossBeforeUnallocatedCardRefunds: true,
         compositionTool: "get_category_transactions",
       },
@@ -225,6 +229,8 @@ export class RealFinancialDataService {
       evidenceScope: {
         supportsCompositionExplanation: true,
         supportsBehavioralCause: false,
+        aggregationScope: "top_transactions_sample",
+        sampleLimited: true,
         note:
           "A lista é uma amostra limitada das maiores transações da categoria. Ela descreve composição observada, não causa comportamental.",
       },
