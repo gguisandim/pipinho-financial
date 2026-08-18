@@ -52,6 +52,15 @@ const envSchema = z.object({
   ENRICHMENT_MAX_INFLOW_GROUPS: z.coerce.number().int().min(1).max(50).default(12),
   ENRICHMENT_BATCH_SIZE: z.coerce.number().int().min(1).max(12).default(4),
   ENRICHMENT_MAX_COMPLETION_TOKENS: z.coerce.number().int().min(500).max(8000).default(2400),
+  // API de dashboard — cache server-side para evitar uma consulta Pluggy por card.
+  DASHBOARD_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(3600000).default(300000),
+  DASHBOARD_AI_MAX_CARDS: z.coerce.number().int().min(1).max(6).default(4),
+  DASHBOARD_AI_MAX_COMPLETION_TOKENS: z.coerce.number().int().min(500).max(4000).default(1400),
+  DASHBOARD_REQUIRE_AUTH: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).default("true"),
+  ),
+  DASHBOARD_API_TOKEN: optionalEnvString,
   // A Pluggy não oferece listagem de Items por segurança. Guardamos os itemIds
   // das autorizações MeuPluggy na configuração da aplicação.
   PLUGGY_ITEM_IDS: optionalEnvString,

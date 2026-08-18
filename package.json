@@ -1,6 +1,6 @@
 {
   "name": "finance-llm-lab",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -31,7 +31,15 @@
     "cycle8": "tsx src/scripts/cycle8.ts",
     "enrichment:scan": "tsx src/scripts/cycle8.ts --no-llm",
     "enrichment:inspect": "tsx src/scripts/cycle8.ts --no-llm --show-descriptions",
-    "enrichment:classify": "tsx src/scripts/cycle8.ts"
+    "enrichment:classify": "tsx src/scripts/cycle8.ts",
+    "qa:local": "npm run typecheck && npm test",
+    "qa:critical": "vitest run tests/financial-real-views.test.ts tests/real-financial-data-service.test.ts tests/real-financial-data-service-retry.test.ts tests/real-data-audit.test.ts tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts tests/financial-quality-grounding.test.ts tests/financial-provenance-grounding.test.ts tests/financial-tool-guard.test.ts tests/agentic-real-tool-executor.test.ts",
+    "qa:real": "tsx src/scripts/audit-real.ts",
+    "qa:agent": "tsx src/scripts/audit-agent.ts",
+    "api:dev": "tsx watch src/server.ts",
+    "qa:dashboard": "vitest run tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts",
+    "dashboard:check": "tsx src/scripts/dashboard-check.ts",
+    "dashboard:token": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
   },
   "dependencies": {
     "dotenv": "latest",

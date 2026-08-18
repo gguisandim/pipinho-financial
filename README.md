@@ -514,3 +514,38 @@ Para inspecionar descrições sanitizadas somente no terminal local:
 npm run cycle8 -- --show-descriptions
 ```
 
+
+## v0.9.2 — Quality Gate + Dashboard API
+
+Antes da próxima etapa visual, o projeto ganhou uma bateria de auditoria e uma API específica para dashboard.
+
+Comandos principais:
+
+```bash
+npm run qa:local
+npm run qa:critical
+npm run qa:real
+npm run qa:agent
+npm run qa:dashboard
+npm run dashboard:check
+npm run api:dev
+```
+
+Dashboard HTTP:
+
+```text
+GET  /api/v1/dashboard/overview
+GET  /api/v1/dashboard/series/monthly
+GET  /api/v1/dashboard/spending/categories
+GET  /api/v1/dashboard/spending/institutions
+GET  /api/v1/dashboard/expenses/largest
+GET  /api/v1/dashboard/quality
+GET  /api/v1/dashboard/capabilities
+POST /api/v1/dashboard/ai/insights
+```
+
+O endpoint de IA recebe apenas agregados/quality metadata e devolve cards estruturados com `metricRefs` e `uiAction`. O valor financeiro exibido no card é sempre resolvido pelo backend a partir do Financial Engine; a LLM não é a fonte numérica do dashboard.
+
+Detalhes: `docs/CICLO_8_2_QA_DASHBOARD_API.md`.
+
+Os endpoints reais de dashboard ficam protegidos por padrão com `DASHBOARD_REQUIRE_AUTH=true`. Configure `DASHBOARD_API_TOKEN` e envie o token apenas de um cliente server-side/BFF; não embuta o segredo no frontend do navegador.

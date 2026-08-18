@@ -33,22 +33,47 @@ export interface RealFinancialDataQuality {
 
 export class RealFinancialDataService {
   private snapshotPromise: Promise<TransactionRepositorySnapshot> | null = null;
+  private snapshotResolvedAtMs: number | null = null;
 
-  constructor(private readonly repository: TransactionRepository) {}
+  constructor(
+    private readonly repository: TransactionRepository,
+    private readonly options: { snapshotTtlMs?: number } = {},
+  ) {}
 
   private snapshot(): Promise<TransactionRepositorySnapshot> {
+    const ttlMs = this.options.snapshotTtlMs ?? Number.POSITIVE_INFINITY;
+    const expired =
+      this.snapshotResolvedAtMs !== null &&
+      Number.isFinite(ttlMs) &&
+      Date.now() - this.snapshotResolvedAtMs >= ttlMs;
+
+    if (expired) {
+      this.snapshotPromise = null;
+      this.snapshotResolvedAtMs = null;
+    }
+
     if (!this.snapshotPromise) {
       this.snapshotPromise = this.repository
         .listTransactions({ includePending: false })
+        .then((snapshot) => {
+          this.snapshotResolvedAtMs = Date.now();
+          return snapshot;
+        })
         .catch((error) => {
           // Não envenena o cache com uma Promise rejeitada. Uma falha transitória
           // da Pluggy pode ser tentada novamente na próxima iteração do Agent.
           this.snapshotPromise = null;
+          this.snapshotResolvedAtMs = null;
           throw error;
         });
     }
 
     return this.snapshotPromise;
+  }
+
+  invalidateCache(): void {
+    this.snapshotPromise = null;
+    this.snapshotResolvedAtMs = null;
   }
 
   private async selected(range: DateRange = {}) {
@@ -334,6 +359,69 @@ export class RealFinancialDataService {
         institutionComesFromPluggyItemMapping: true,
         supportsInstitutionComparison: true,
       },
+    };
+  }
+
+  async getMonthlySeries(
+    options: DateRange & { months?: number } = {},
+  ) {
+    const { snapshot, transactions } = await this.selected(options);
+    const monthLimit = Math.min(Math.max(options.months ?? 12, 1), 24);
+
+    if (transactions.length === 0) {
+      return {
+        status: "no_data" as const,
+        source: snapshot.source,
+        requestedPeriod: options,
+        availablePeriod: getAvailablePeriod(snapshot.transactions),
+        points: [],
+      };
+    }
+
+    const groups = new Map<string, Transaction[]>();
+    for (const transaction of transactions) {
+      const month = transaction.date.slice(0, 7);
+      const current = groups.get(month) ?? [];
+      current.push(transaction);
+      groups.set(month, current);
+    }
+
+    const months = [...groups.keys()].sort().slice(-monthLimit);
+    const points = months.map((month) => {
+      const monthTransactions = groups.get(month)!;
+      const analysis = analyzeFinancialViews(monthTransactions);
+      return {
+        month,
+        transactionCount: monthTransactions.length,
+        liquidity: {
+          bankInflows: analysis.liquidity.bankInflows,
+          bankOutflows: analysis.liquidity.bankOutflows,
+          netBankCashFlow: analysis.liquidity.netBankCashFlow,
+        },
+        spending: {
+          bankSpending: analysis.spending.bankSpending,
+          cardPurchases: analysis.spending.cardPurchases,
+          netSpending: analysis.spending.netSpending,
+        },
+        income: {
+          confirmedIncome: analysis.income.confirmedIncome,
+          estimatedIncome: analysis.income.estimatedIncome,
+          totalIncomeEstimate: analysis.income.totalIncomeEstimate,
+          quality: analysis.income.quality,
+        },
+        savings: {
+          available: analysis.savings.available,
+          estimatedSavings: analysis.savings.estimatedSavings,
+          estimatedSavingsRatePct: analysis.savings.estimatedSavingsRatePct,
+        },
+      };
+    });
+
+    return {
+      status: "ok" as const,
+      source: snapshot.source,
+      period: { start: months[0]!, end: months.at(-1)! },
+      points,
     };
   }
 

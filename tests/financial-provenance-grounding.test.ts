@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateFinancialProvenanceGrounding } from "../src/agent/financial-provenance-grounding.js";
+import { evaluateFinancialProvenanceGrounding, sanitizeFinancialProvenanceGrounding } from "../src/agent/financial-provenance-grounding.js";
 import type { AgentToolTrace } from "../src/agent/financial-agent.types.js";
 
 function tool(name: string): AgentToolTrace {
@@ -40,4 +40,16 @@ describe("financial provenance grounding", () => {
     expect(result.passed).toBe(false);
     expect(result.violations[0]?.code).toBe("internal_tool_name_exposure");
   });
+});
+
+
+it("corrige violações simples de proveniência sem nova chamada de LLM", () => {
+  const answer = "O Pluggy já removeu a dupla contagem entre compra e fatura. Use get_income para revisar a renda.";
+  const tools = [tool("get_cash_flow"), tool("get_income")];
+  const evaluation = evaluateFinancialProvenanceGrounding(answer, tools);
+  const sanitized = sanitizeFinancialProvenanceGrounding(answer, evaluation.violations);
+  const finalEvaluation = evaluateFinancialProvenanceGrounding(sanitized, tools);
+  expect(finalEvaluation.passed).toBe(true);
+  expect(sanitized).toContain("backend");
+  expect(sanitized).not.toContain("get_income");
 });

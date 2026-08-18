@@ -15,6 +15,7 @@ import {
   executeFinancialToolSafely,
   executeFinancialToolSafelyAsync,
   type FinancialToolExecutor,
+  questionHasTemporalConstraint,
 } from "../agent/financial-tool-guard.js";
 import type {
   AgentTermination,
@@ -52,6 +53,41 @@ function parseArgumentsForTrace(rawArguments: string): unknown {
   } catch {
     return rawArguments;
   }
+}
+
+
+function normalizeDerivedFullPeriodArguments(options: {
+  question: string;
+  name: string;
+  rawArguments: string;
+  availablePeriod: { start: string; end: string } | null;
+}): string {
+  if (!options.availablePeriod || questionHasTemporalConstraint(options.question)) {
+    return options.rawArguments;
+  }
+  if (options.name === "get_financial_period") return options.rawArguments;
+
+  try {
+    const parsed = options.rawArguments.trim()
+      ? JSON.parse(options.rawArguments) as Record<string, unknown>
+      : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return options.rawArguments;
+    }
+
+    if (
+      parsed.startDate === options.availablePeriod.start &&
+      parsed.endDate === options.availablePeriod.end
+    ) {
+      delete parsed.startDate;
+      delete parsed.endDate;
+      return JSON.stringify(parsed);
+    }
+  } catch {
+    return options.rawArguments;
+  }
+
+  return options.rawArguments;
 }
 
 function usageSum(usages: LlmUsage[]): LlmUsage {
@@ -109,6 +145,7 @@ export class AgenticFinancialService {
     let termination: AgentTermination | null = null;
     let answer: string | null = null;
     let totalToolCalls = 0;
+    let discoveredAvailablePeriod: { start: string; end: string } | null = null;
 
     for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
       const turn = await this.llm.completeWithTools({
@@ -146,7 +183,13 @@ export class AgenticFinancialService {
 
       for (const toolCall of turn.toolCalls) {
         totalToolCalls += 1;
-        const parsedArguments = parseArgumentsForTrace(toolCall.function.arguments);
+        const effectiveArguments = normalizeDerivedFullPeriodArguments({
+          question,
+          name: toolCall.function.name,
+          rawArguments: toolCall.function.arguments,
+          availablePeriod: discoveredAvailablePeriod,
+        });
+        const parsedArguments = parseArgumentsForTrace(effectiveArguments);
         const signature = `${toolCall.function.name}:${JSON.stringify(parsedArguments)}`;
 
         let outcome: "executed" | "rejected";
@@ -176,18 +219,35 @@ export class AgenticFinancialService {
             ? await executeFinancialToolSafelyAsync({
                 question,
                 name: toolCall.function.name,
-                rawArguments: toolCall.function.arguments,
+                rawArguments: effectiveArguments,
                 referenceDate,
                 executor: this.options.toolExecutor,
               })
             : executeFinancialToolSafely({
                 question,
                 name: toolCall.function.name,
-                rawArguments: toolCall.function.arguments,
+                rawArguments: effectiveArguments,
                 referenceDate,
               });
           outcome = execution.status;
           result = execution.result;
+
+          if (
+            outcome === "executed" &&
+            toolCall.function.name === "get_financial_period" &&
+            result &&
+            typeof result === "object" &&
+            !Array.isArray(result)
+          ) {
+            const candidate = result as { status?: string; start?: unknown; end?: unknown };
+            if (
+              candidate.status === "ok" &&
+              typeof candidate.start === "string" &&
+              typeof candidate.end === "string"
+            ) {
+              discoveredAvailablePeriod = { start: candidate.start, end: candidate.end };
+            }
+          }
 
           // Só bloqueia repetição quando a chamada realmente executou ou quando
           // a rejeição foi determinística. Erros de execução (rede/5xx/timeout)
@@ -329,45 +389,66 @@ export class AgenticFinancialService {
       : { passed: true, violations: [] };
 
     if (answer && !provenanceGrounding.passed) {
-      const repair = await this.fallbackLlm.complete({
-        system: FINANCIAL_PROVENANCE_REPAIR_SYSTEM_PROMPT,
-        user: buildFinancialProvenanceRepairPrompt({
-          question,
-          answer,
-          violations: provenanceGrounding.violations,
-          tools,
-        }),
-      });
+      const deterministicStartedAt = performance.now();
+      const deterministicText = sanitizeFinancialProvenanceGrounding(
+        answer,
+        provenanceGrounding.violations,
+      );
+      const deterministicEvaluation = evaluateFinancialProvenanceGrounding(
+        deterministicText,
+        tools,
+      );
 
-      provenanceRepair = {
-        model: repair.model,
-        latencyMs: repair.latencyMs,
-        usage: repair.usage,
-        applied: true,
-      };
+      if (deterministicText && deterministicEvaluation.passed) {
+        answer = deterministicText;
+        provenanceGrounding = deterministicEvaluation;
+        provenanceRepair = {
+          model: "deterministic-provenance-sanitizer",
+          latencyMs: Math.round(performance.now() - deterministicStartedAt),
+          usage: {},
+          applied: true,
+        };
+      } else {
+        const repair = await this.fallbackLlm.complete({
+          system: FINANCIAL_PROVENANCE_REPAIR_SYSTEM_PROMPT,
+          user: buildFinancialProvenanceRepairPrompt({
+            question,
+            answer,
+            violations: provenanceGrounding.violations,
+            tools,
+          }),
+        });
 
-      const repairedText = repair.text?.trim();
-      if (repairedText) {
-        const repairedEvaluation = evaluateFinancialProvenanceGrounding(
-          repairedText,
-          tools,
-        );
-        if (repairedEvaluation.passed) {
-          answer = repairedText;
-          provenanceGrounding = repairedEvaluation;
+        provenanceRepair = {
+          model: repair.model,
+          latencyMs: repair.latencyMs,
+          usage: repair.usage,
+          applied: true,
+        };
+
+        const repairedText = repair.text?.trim();
+        if (repairedText) {
+          const repairedEvaluation = evaluateFinancialProvenanceGrounding(
+            repairedText,
+            tools,
+          );
+          if (repairedEvaluation.passed) {
+            answer = repairedText;
+            provenanceGrounding = repairedEvaluation;
+          } else {
+            answer = sanitizeFinancialProvenanceGrounding(
+              repairedText,
+              repairedEvaluation.violations,
+            );
+            provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
+          }
         } else {
           answer = sanitizeFinancialProvenanceGrounding(
-            repairedText,
-            repairedEvaluation.violations,
+            answer,
+            provenanceGrounding.violations,
           );
           provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
         }
-      } else {
-        answer = sanitizeFinancialProvenanceGrounding(
-          answer,
-          provenanceGrounding.violations,
-        );
-        provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
       }
     }
 

@@ -79,7 +79,7 @@ function getDateArguments(args: Record<string, unknown>): string[] {
   );
 }
 
-function hasTemporalConstraint(question: string): boolean {
+export function questionHasTemporalConstraint(question: string): boolean {
   return (
     temporalPattern.test(question) ||
     monthPattern.test(question) ||
@@ -105,7 +105,7 @@ function validateDateGrounding(
   const dateArgs = getDateArguments(args);
   if (dateArgs.length === 0) return null;
 
-  if (!hasTemporalConstraint(question)) {
+  if (!questionHasTemporalConstraint(question)) {
     return {
       status: "rejected",
       result: {

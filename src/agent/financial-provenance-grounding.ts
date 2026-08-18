@@ -97,7 +97,55 @@ export function sanitizeFinancialProvenanceGrounding(
   violations: FinancialProvenanceViolation[],
 ): string {
   if (violations.length === 0) return answer;
-  const blocked = new Set(violations.map((violation) => violation.sentence));
-  const safe = splitSentences(answer).filter((sentence) => !blocked.has(sentence));
-  return safe.join("\n\n").trim();
+
+  const bySentence = new Map<string, FinancialProvenanceViolation[]>();
+  for (const violation of violations) {
+    const current = bySentence.get(violation.sentence) ?? [];
+    current.push(violation);
+    bySentence.set(violation.sentence, current);
+  }
+
+  const toolLabels: Record<string, string> = {
+    get_financial_period: "a consulta do período disponível",
+    get_cash_flow: "a análise de fluxo financeiro",
+    get_income: "a análise de renda",
+    get_spending_by_category: "a análise por categoria",
+    get_category_transactions: "a composição da categoria",
+    get_largest_expenses: "a análise dos maiores gastos",
+    get_spending_by_institution: "a comparação por instituição",
+    get_data_capabilities: "a verificação dos dados disponíveis",
+  };
+
+  const rewritten = splitSentences(answer).map((sentence) => {
+    const sentenceViolations = bySentence.get(sentence);
+    if (!sentenceViolations?.length) return sentence;
+
+    let safe = sentence;
+    const codes = new Set(sentenceViolations.map((item) => item.code));
+
+    if (
+      codes.has("wrong_double_count_attribution") ||
+      codes.has("wrong_income_attribution")
+    ) {
+      safe = safe
+        .replace(/\bO Pluggy\b/g, "O backend")
+        .replace(/\bo Pluggy\b/g, "o backend")
+        .replace(/\bPluggy\b/g, "o backend");
+    }
+
+    if (codes.has("unsupported_category_sample_claim")) {
+      safe =
+        "A cobertura por categoria depende da qualidade de classificação disponível no período.";
+    }
+
+    if (codes.has("internal_tool_name_exposure")) {
+      safe = safe.replace(/\bget_[a-z0-9_]+\b/gi, (name) =>
+        toolLabels[name.toLowerCase()] ?? "a análise correspondente",
+      );
+    }
+
+    return safe;
+  });
+
+  return rewritten.join("\n\n").trim();
 }
