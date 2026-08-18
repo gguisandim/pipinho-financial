@@ -14,6 +14,8 @@ Laboratório didático para estudar integração entre dados financeiros estrutu
 - **Ciclo 6.1:** autenticação Pluggy server-side + cache da API Key.
 - **Ciclo 6.2:** leitura real de Items, Accounts e Transactions com paginação por cursor.
 - **Ciclo 6.3:** `TransactionRepository` + mapper Pluggy → domínio, preservando BANK/CREDIT, status, origem e evidência de categoria.
+- **Ciclo 6.4:** views financeiras reais de liquidez/spending com proteção contra dupla contagem e quality guards de renda/savings.
+- **Ciclo 7:** Real Financial Agent: tool calling sobre `PluggyTransactionRepository` com quality grounding e sem enviar o extrato completo ao LLM.
 
 Princípio arquitetural:
 
@@ -24,6 +26,7 @@ Princípio arquitetural:
 - Node.js 22+
 - conta na Groq
 - API key da Groq
+- Para os ciclos 6/7: aplicação Pluggy configurada e Items autorizados
 
 ## Instalação
 
@@ -477,3 +480,20 @@ Por padrão valores monetários continuam ocultos no terminal. Use `FINANCE_ANAL
 O engine não publica `savings`/`savings rate` quando não existe renda confirmada ou quando a renda classificada cobre menos de 50% das entradas BANK. Entradas sem semântica suficiente permanecem em `unclassifiedBankInflows`. Isso evita taxas matematicamente válidas, mas semanticamente enganosas.
 
 Veja `docs/CICLO_6_4_1.md`.
+
+
+## Ciclo 7 — Real Financial Agent
+
+```bash
+npm run cycle7 -- "Analise meus gastos"
+```
+
+OpenRouter:
+
+```bash
+npm run cycle7 -- --provider openrouter "Compare meus gastos por instituição"
+```
+
+O agent real usa o mesmo loop dos ciclos anteriores, mas recebe `realFinancialToolDefinitions` e um executor assíncrono ligado ao `PluggyTransactionRepository`. O repository é carregado uma vez por resposta e as tools trabalham sobre esse snapshot.
+
+O LLM não recebe o extrato completo. Tools agregadas retornam apenas métricas necessárias; tools detalhadas possuem limite de registros. Se `savings.available=false` ou `income.quality=insufficient`, o quality grounding impede que a resposta publique métricas não sustentadas.

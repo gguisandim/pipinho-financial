@@ -3,13 +3,22 @@ import {
   evaluateCausalGrounding,
   sanitizeCausalGrounding,
 } from "../agent/causal-grounding.js";
-import { executeFinancialToolSafely } from "../agent/financial-tool-guard.js";
+import {
+  evaluateFinancialQualityGrounding,
+  sanitizeFinancialQualityGrounding,
+} from "../agent/financial-quality-grounding.js";
+import {
+  executeFinancialToolSafely,
+  executeFinancialToolSafelyAsync,
+  type FinancialToolExecutor,
+} from "../agent/financial-tool-guard.js";
 import type {
   AgentTermination,
   AgentToolTrace,
   AgentTurnTrace,
 } from "../agent/financial-agent.types.js";
 import { financialToolDefinitions } from "../financial-tools/financial-tools.js";
+import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
 import { buildFinancialAgentSystemPrompt } from "../llm/prompts/financial-agent.prompt.js";
 import {
   FINANCIAL_AGENT_FALLBACK_SYSTEM_PROMPT,
@@ -24,6 +33,10 @@ import type {
   ToolCallingLlmProvider,
   ToolCallingMessage,
 } from "../llm/tool-calling/tool-calling.types.js";
+import {
+  FINANCIAL_QUALITY_REPAIR_SYSTEM_PROMPT,
+  buildFinancialQualityRepairPrompt,
+} from "../llm/prompts/financial-quality-repair.prompt.js";
 
 function parseArgumentsForTrace(rawArguments: string): unknown {
   try {
@@ -59,6 +72,9 @@ export class AgenticFinancialService {
       maxIterations?: number;
       maxToolCalls?: number;
       referenceDate?: string;
+      toolDefinitions?: ToolDefinition[];
+      toolExecutor?: FinancialToolExecutor;
+      systemPromptBuilder?: (referenceDate: string) => string;
     } = {},
   ) {}
 
@@ -67,10 +83,14 @@ export class AgenticFinancialService {
     const maxToolCalls = this.options.maxToolCalls ?? env.AGENT_MAX_TOOL_CALLS;
     const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
 
+    const toolDefinitions = this.options.toolDefinitions ?? financialToolDefinitions;
+    const systemPromptBuilder =
+      this.options.systemPromptBuilder ?? buildFinancialAgentSystemPrompt;
+
     const messages: ToolCallingMessage[] = [
       {
         role: "system",
-        content: buildFinancialAgentSystemPrompt(referenceDate),
+        content: systemPromptBuilder(referenceDate),
       },
       { role: "user", content: question },
     ];
@@ -85,7 +105,7 @@ export class AgenticFinancialService {
     for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
       const turn = await this.llm.completeWithTools({
         messages,
-        tools: financialToolDefinitions,
+        tools: toolDefinitions,
         toolChoice: iteration === 1 ? "required" : "auto",
         parallelToolCalls: true,
       });
@@ -145,12 +165,20 @@ export class AgenticFinancialService {
           };
         } else {
           seenCalls.add(signature);
-          const execution = executeFinancialToolSafely({
-            question,
-            name: toolCall.function.name,
-            rawArguments: toolCall.function.arguments,
-            referenceDate,
-          });
+          const execution = this.options.toolExecutor
+            ? await executeFinancialToolSafelyAsync({
+                question,
+                name: toolCall.function.name,
+                rawArguments: toolCall.function.arguments,
+                referenceDate,
+                executor: this.options.toolExecutor,
+              })
+            : executeFinancialToolSafely({
+                question,
+                name: toolCall.function.name,
+                rawArguments: toolCall.function.arguments,
+                referenceDate,
+              });
           outcome = execution.status;
           result = execution.result;
         }
@@ -176,6 +204,12 @@ export class AgenticFinancialService {
     }
 
     let groundingRepair: {
+      model: string;
+      latencyMs: number;
+      usage: LlmUsage;
+      applied: boolean;
+    } | null = null;
+    let qualityRepair: {
       model: string;
       latencyMs: number;
       usage: LlmUsage;
@@ -219,6 +253,53 @@ export class AgenticFinancialService {
       }
     }
 
+    let qualityGrounding = answer
+      ? evaluateFinancialQualityGrounding(answer, tools)
+      : { passed: true, violations: [] };
+
+    if (answer && !qualityGrounding.passed) {
+      const repair = await this.fallbackLlm.complete({
+        system: FINANCIAL_QUALITY_REPAIR_SYSTEM_PROMPT,
+        user: buildFinancialQualityRepairPrompt({
+          question,
+          answer,
+          violations: qualityGrounding.violations,
+          tools,
+        }),
+      });
+
+      qualityRepair = {
+        model: repair.model,
+        latencyMs: repair.latencyMs,
+        usage: repair.usage,
+        applied: true,
+      };
+
+      const repairedText = repair.text?.trim();
+      if (repairedText) {
+        const repairedEvaluation = evaluateFinancialQualityGrounding(
+          repairedText,
+          tools,
+        );
+        if (repairedEvaluation.passed) {
+          answer = repairedText;
+          qualityGrounding = repairedEvaluation;
+        } else {
+          answer = sanitizeFinancialQualityGrounding(
+            repairedText,
+            repairedEvaluation.violations,
+          );
+          qualityGrounding = evaluateFinancialQualityGrounding(answer, tools);
+        }
+      } else {
+        answer = sanitizeFinancialQualityGrounding(
+          answer,
+          qualityGrounding.violations,
+        );
+        qualityGrounding = evaluateFinancialQualityGrounding(answer, tools);
+      }
+    }
+
     if (!answer) {
       termination ??= "max_iterations_fallback";
 
@@ -242,6 +323,14 @@ export class AgenticFinancialService {
         answer = sanitizeCausalGrounding(answer, causalGrounding.violations);
         causalGrounding = evaluateCausalGrounding(answer, tools);
       }
+      qualityGrounding = evaluateFinancialQualityGrounding(answer, tools);
+      if (!qualityGrounding.passed) {
+        answer = sanitizeFinancialQualityGrounding(
+          answer,
+          qualityGrounding.violations,
+        );
+        qualityGrounding = evaluateFinancialQualityGrounding(answer, tools);
+      }
 
       return {
         question,
@@ -256,6 +345,11 @@ export class AgenticFinancialService {
             passed: causalGrounding.passed,
             repaired: false,
             violations: causalGrounding.violations,
+          },
+          quality: {
+            passed: qualityGrounding.passed,
+            repaired: false,
+            violations: qualityGrounding.violations,
           },
         },
         llm: {
@@ -289,18 +383,26 @@ export class AgenticFinancialService {
           repaired: groundingRepair !== null,
           violations: causalGrounding.violations,
         },
+        quality: {
+          passed: qualityGrounding.passed,
+          repaired: qualityRepair !== null,
+          violations: qualityGrounding.violations,
+        },
       },
       llm: {
         agentModel: turns.at(-1)?.model ?? "unknown",
         fallback: null,
         groundingRepair,
+        qualityRepair,
         total: {
           latencyMs:
             turns.reduce((total, turn) => total + turn.latencyMs, 0) +
-            (groundingRepair?.latencyMs ?? 0),
+            (groundingRepair?.latencyMs ?? 0) +
+            (qualityRepair?.latencyMs ?? 0),
           usage: usageSum([
             ...turns.map((turn) => turn.usage),
             ...(groundingRepair ? [groundingRepair.usage] : []),
+            ...(qualityRepair ? [qualityRepair.usage] : []),
           ]),
         },
       },

@@ -98,9 +98,9 @@ async function main() {
 
   console.log("\nCiclo 6.4.1 concluído: Financial Engine separa liquidez/spending e agora também bloqueia savings rate quando a renda não tem evidência suficiente.");
   if (analysis.income.quality === "insufficient") {
-    console.log("Antes do Ciclo 7, revise a cobertura de renda acima. O Agent não deve receber um savings rate baseado em renda subdetectada.");
+    console.log("Ciclo 7 pode usar estes dados desde que respeite income.quality=insufficient e savings.available=false; o quality grounding implementa essa proteção.");
   } else {
-    console.log("Próximo passo (Ciclo 7): substituir as tools sintéticas por um FinancialDataService/Repository selecionável e deixar o Agent consultar dados reais com escopo controlado.");
+    console.log("Próximo passo (Ciclo 7): deixar o Agent consultar dados reais com escopo controlado e quality grounding.");
   }
 }
 

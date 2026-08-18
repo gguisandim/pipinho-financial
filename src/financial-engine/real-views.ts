@@ -178,7 +178,7 @@ export function isKnownCardRefund(transaction: Transaction): boolean {
   ]);
 }
 
-function classifyMovement(transaction: Transaction): FinancialMovementKind {
+export function classifyFinancialMovement(transaction: Transaction): FinancialMovementKind {
   const role = transaction.metadata?.role;
 
   if (isSamePersonTransfer(transaction)) return "internal_transfer";
@@ -236,7 +236,7 @@ export function analyzeFinancialViews(
 
   const classified = transactions.map((transaction) => ({
     transaction,
-    kind: classifyMovement(transaction),
+    kind: classifyFinancialMovement(transaction),
   }));
 
   const bankTransactions = classified.filter(({ transaction }) =>

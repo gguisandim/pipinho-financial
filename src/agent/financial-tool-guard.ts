@@ -25,6 +25,11 @@ export interface ToolExecutionRejected {
 
 export type SafeToolExecution = ToolExecutionOk | ToolExecutionRejected;
 
+export type FinancialToolExecutor = (
+  name: string,
+  rawArguments: string,
+) => unknown | Promise<unknown>;
+
 const monthPattern =
   /\b(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/i;
 
@@ -208,6 +213,58 @@ export function executeFinancialToolSafely(options: {
         status: "tool_error",
         code: "execution_error",
         message: error instanceof Error ? error.message : "Falha desconhecida ao executar a ferramenta.",
+      },
+    };
+  }
+}
+
+
+export async function executeFinancialToolSafelyAsync(options: {
+  question: string;
+  name: string;
+  rawArguments: string;
+  referenceDate: string;
+  executor: FinancialToolExecutor;
+}): Promise<SafeToolExecution> {
+  const parsed = parseArguments(options.rawArguments);
+  if (!parsed.ok) return parsed.error;
+
+  const groundingError = validateDateGrounding(
+    options.question,
+    parsed.value,
+    options.referenceDate,
+  );
+  if (groundingError) return groundingError;
+
+  try {
+    return {
+      status: "executed",
+      result: await options.executor(options.name, options.rawArguments),
+    };
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return {
+        status: "rejected",
+        result: {
+          status: "tool_error",
+          code: "invalid_arguments",
+          message: "A ferramenta foi chamada com argumentos incompatíveis com seu contrato.",
+          suggestion:
+            "Corrija os argumentos usando exatamente o schema da ferramenta e tente novamente.",
+          details: error.issues,
+        },
+      };
+    }
+
+    return {
+      status: "rejected",
+      result: {
+        status: "tool_error",
+        code: "execution_error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Falha desconhecida ao executar a ferramenta.",
       },
     };
   }
