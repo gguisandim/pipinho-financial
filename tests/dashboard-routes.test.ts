@@ -131,6 +131,29 @@ describe("dashboardRoutes", () => {
     expect(response.json().error).toBe("invalid_request");
   });
 
+
+  it("rejeita data ISO impossível, range invertido e parâmetros desconhecidos", async () => {
+    const server = await app();
+
+    const impossible = await server.inject({
+      method: "GET",
+      url: "/api/v1/dashboard/overview?startDate=2026-99-99",
+    });
+    expect(impossible.statusCode).toBe(400);
+
+    const reversed = await server.inject({
+      method: "GET",
+      url: "/api/v1/dashboard/overview?startDate=2026-08-10&endDate=2026-08-01",
+    });
+    expect(reversed.statusCode).toBe(400);
+
+    const unknown = await server.inject({
+      method: "GET",
+      url: "/api/v1/dashboard/overview?startdate=2026-08-01",
+    });
+    expect(unknown.statusCode).toBe(400);
+  });
+
   it("retorna insight estruturado com evidência resolvida pelo backend", async () => {
     const server = await app();
     const response = await server.inject({

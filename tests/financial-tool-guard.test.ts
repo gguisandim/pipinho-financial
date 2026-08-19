@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { executeFinancialToolSafely } from "../src/agent/financial-tool-guard.js";
+import { executeFinancialTool } from "../src/financial-tools/financial-tools.js";
 
 describe("financial tool grounding guard", () => {
   const referenceDate = "2026-08-16";
@@ -13,6 +14,7 @@ describe("financial tool grounding guard", () => {
         endDate: "2023-12-31",
       }),
       referenceDate,
+      executor: executeFinancialTool,
     });
 
     expect(result.status).toBe("rejected");
@@ -28,6 +30,7 @@ describe("financial tool grounding guard", () => {
         endDate: "2023-07-31",
       }),
       referenceDate,
+      executor: executeFinancialTool,
     });
 
     expect(result.status).toBe("rejected");
@@ -43,6 +46,7 @@ describe("financial tool grounding guard", () => {
         endDate: "2026-07-31",
       }),
       referenceDate,
+      executor: executeFinancialTool,
     });
 
     expect(result.status).toBe("executed");
@@ -55,6 +59,7 @@ describe("financial tool grounding guard", () => {
       name: "get_data_capabilities",
       rawArguments: JSON.stringify({ entity: "all" }),
       referenceDate,
+      executor: executeFinancialTool,
     });
 
     expect(result.status).toBe("rejected");

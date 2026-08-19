@@ -1,4 +1,5 @@
 import { PluggyAuthClient } from "./pluggy-auth.client.js";
+import { redactSensitiveText } from "../../security/redaction.js";
 
 export type PluggyApiErrorCode =
   | "unauthorized"
@@ -156,7 +157,7 @@ export class PluggyApiClient {
               : "http_error";
 
       throw new PluggyApiError(
-        `A Pluggy retornou HTTP ${response.status} para GET ${path} após ${attempt + 1} tentativa(s).`,
+        `A Pluggy retornou HTTP ${response.status} para GET ${redactSensitiveText(path)} após ${attempt + 1} tentativa(s).`,
         response.status,
         code,
         body,

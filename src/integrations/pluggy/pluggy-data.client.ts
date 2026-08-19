@@ -10,6 +10,7 @@ import {
   type PluggyTransaction,
 } from "./pluggy-data.schemas.js";
 import { PluggyApiClient, PluggyApiError } from "./pluggy-api.client.js";
+import { maskIdentifier } from "../../security/redaction.js";
 
 export interface ListTransactionsOptions {
   dateFrom?: string;
@@ -45,7 +46,7 @@ export class PluggyDataClient {
     const parsed = pluggyItemSchema.safeParse(body);
     if (!parsed.success) {
       throw new PluggyApiError(
-        `Resposta inválida ao recuperar Item ${itemId}.`,
+        `Resposta inválida ao recuperar Item ${maskIdentifier(itemId)}.`,
         200,
         "invalid_response",
         parsed.error.flatten(),
@@ -87,7 +88,7 @@ export class PluggyDataClient {
       const parsed = pluggyAccountSchema.array().safeParse(body);
       if (!parsed.success) {
         throw new PluggyApiError(
-          `Resposta inválida ao listar Accounts do Item ${itemId}.`,
+          `Resposta inválida ao listar Accounts do Item ${maskIdentifier(itemId)}.`,
           200,
           "invalid_response",
           parsed.error.flatten(),
@@ -99,7 +100,7 @@ export class PluggyDataClient {
     const parsed = pluggyAccountsResponseSchema.safeParse(body);
     if (!parsed.success) {
       throw new PluggyApiError(
-        `Resposta inválida ao listar Accounts do Item ${itemId}.`,
+        `Resposta inválida ao listar Accounts do Item ${maskIdentifier(itemId)}.`,
         200,
         "invalid_response",
         parsed.error.flatten(),
@@ -130,7 +131,7 @@ export class PluggyDataClient {
       const parsed = pluggyTransactionsCursorResponseSchema.safeParse(body);
       if (!parsed.success) {
         throw new PluggyApiError(
-          `Resposta inválida ao listar Transactions da Account ${accountId}.`,
+          `Resposta inválida ao listar Transactions da Account ${maskIdentifier(accountId)}.`,
           200,
           "invalid_response",
           parsed.error.flatten(),
@@ -149,7 +150,7 @@ export class PluggyDataClient {
 
       if (seenNext.has(next)) {
         throw new PluggyApiError(
-          `Cursor repetido ao paginar Transactions da Account ${accountId}; execução interrompida para evitar loop.`,
+          `Cursor repetido ao paginar Transactions da Account ${maskIdentifier(accountId)}; execução interrompida para evitar loop.`,
           200,
           "invalid_response",
         );

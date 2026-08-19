@@ -59,8 +59,10 @@ const repository: TransactionRepository = {
 describe("DashboardInsightService", () => {
   it("envia somente agregados e resolve evidências no backend", async () => {
     let capturedPrompt = "";
+    let providerCalls = 0;
     const provider: StructuredLlmProvider = {
       async completeStructured<T>(request: StructuredLlmRequest<T>) {
+        providerCalls += 1;
         capturedPrompt = request.user;
         return {
           data: request.schema.parse({
@@ -109,5 +111,9 @@ describe("DashboardInsightService", () => {
     expect(result.cards).toHaveLength(1);
     expect(result.cards.some((card) => card.uiAction === "open_financial_charges")).toBe(false);
     expect(result.privacy.rawTransactionsSentToLlm).toBe(false);
+
+    const cached = await service.generate();
+    expect(cached.status).toBe("ok");
+    expect(providerCalls).toBe(1);
   });
 });

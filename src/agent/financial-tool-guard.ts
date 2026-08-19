@@ -1,5 +1,4 @@
 import { ZodError } from "zod";
-import { executeFinancialTool } from "../financial-tools/financial-tools.js";
 
 export interface ToolExecutionOk {
   status: "executed";
@@ -176,6 +175,7 @@ export function executeFinancialToolSafely(options: {
   name: string;
   rawArguments: string;
   referenceDate: string;
+  executor: (name: string, rawArguments: string) => unknown;
 }): SafeToolExecution {
   const parsed = parseArguments(options.rawArguments);
   if (!parsed.ok) return parsed.error;
@@ -190,7 +190,7 @@ export function executeFinancialToolSafely(options: {
   try {
     return {
       status: "executed",
-      result: executeFinancialTool(options.name, options.rawArguments),
+      result: options.executor(options.name, options.rawArguments),
     };
   } catch (error) {
     if (error instanceof ZodError) {

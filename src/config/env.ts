@@ -57,6 +57,7 @@ const envSchema = z.object({
   ENRICHMENT_MAX_COMPLETION_TOKENS: z.coerce.number().int().min(500).max(8000).default(2400),
   // API de dashboard — cache server-side para evitar uma consulta Pluggy por card.
   DASHBOARD_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(3600000).default(300000),
+  DASHBOARD_AI_CACHE_TTL_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
   DASHBOARD_AI_MAX_CARDS: z.coerce.number().int().min(1).max(6).default(4),
   DASHBOARD_AI_MAX_COMPLETION_TOKENS: z.coerce.number().int().min(500).max(4000).default(1400),
   DASHBOARD_REQUIRE_AUTH: z.preprocess(

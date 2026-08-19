@@ -1,18 +1,15 @@
 import { routeFinancialTools, selectFinancialToolDefinitions } from "../agent/financial-tool-router.js";
-import { env, requireOpenRouterApiKey } from "../config/env.js";
+import { env, requireGroqApiKey } from "../config/env.js";
 import {
   realFinancialToolDefinitions,
   RealFinancialToolExecutor,
 } from "../financial-tools/real-financial-tools.js";
 import { createPluggyTransactionRepository } from "../integrations/pluggy/pluggy.factory.js";
 import { buildRealFinancialAgentSystemPrompt } from "../llm/prompts/financial-real-agent.prompt.js";
-import { OpenRouterProvider } from "../llm/providers/openrouter.provider.js";
-import { OpenRouterToolCallingProvider } from "../llm/tool-calling/openrouter-tool-calling.provider.js";
+import { GroqProvider } from "../llm/providers/groq.provider.js";
+import { GroqToolCallingProvider } from "../llm/tool-calling/groq-tool-calling.provider.js";
 import { AgenticFinancialService } from "./agentic-financial.service.js";
-import { createGroqRealFinancialAgentService } from "./real-financial-agent-groq.factory.js";
 import { RealFinancialDataService } from "./real-financial-data.service.js";
-
-export type RealFinancialAgentProvider = "groq" | "openrouter";
 
 function deterministicToolPlan(question: string) {
   const decision = routeFinancialTools(question);
@@ -26,32 +23,28 @@ function deterministicToolPlan(question: string) {
   };
 }
 
-export function createRealFinancialAgentService(options: {
-  provider?: RealFinancialAgentProvider;
+export function createGroqRealFinancialAgentService(options: {
   referenceDate?: string;
+  snapshotTtlMs?: number;
 } = {}) {
-  const provider = options.provider ?? "groq";
+  requireGroqApiKey();
 
-  if (provider === "groq") {
-    return createGroqRealFinancialAgentService({
-      referenceDate: options.referenceDate,
-    });
-  }
-
-  requireOpenRouterApiKey();
   const repository = createPluggyTransactionRepository();
-  const data = new RealFinancialDataService(repository);
+  const data = new RealFinancialDataService(repository, {
+    snapshotTtlMs: options.snapshotTtlMs ?? env.DASHBOARD_CACHE_TTL_MS,
+  });
   const toolExecutor = new RealFinancialToolExecutor(data);
 
   return new AgenticFinancialService(
-    new OpenRouterToolCallingProvider(env.OPENROUTER_AGENT_MODEL),
-    new OpenRouterProvider(env.OPENROUTER_FINAL_MODEL),
+    new GroqToolCallingProvider(env.GROQ_AGENT_MODEL),
+    new GroqProvider(env.GROQ_FINAL_MODEL),
     {
       referenceDate: options.referenceDate,
       toolDefinitions: realFinancialToolDefinitions,
       toolDefinitionsSelector: (question, definitions) =>
         selectFinancialToolDefinitions(question, definitions).tools,
-      toolExecutor: (name, rawArguments) => toolExecutor.execute(name, rawArguments),
+      toolExecutor: (name, rawArguments) =>
+        toolExecutor.execute(name, rawArguments),
       systemPromptBuilder: buildRealFinancialAgentSystemPrompt,
       deterministicToolPlanner: (question) => deterministicToolPlan(question),
     },

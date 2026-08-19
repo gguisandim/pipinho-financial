@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AgenticFinancialService } from "../src/services/agentic-financial.service.js";
+import { financialToolDefinitions, executeFinancialTool } from "../src/financial-tools/financial-tools.js";
+import { buildFinancialAgentSystemPrompt } from "../src/llm/prompts/financial-agent.prompt.js";
 import type {
   ToolCallingLlmProvider,
   ToolCallingRequest,
@@ -97,6 +99,9 @@ describe("AgenticFinancialService", () => {
       referenceDate: "2026-08-16",
       maxIterations: 5,
       maxToolCalls: 10,
+      toolDefinitions: financialToolDefinitions,
+      systemPromptBuilder: buildFinancialAgentSystemPrompt,
+      toolExecutor: executeFinancialTool,
     });
 
     const result = await service.answer("Analise meu fluxo financeiro");
@@ -159,6 +164,9 @@ describe("AgenticFinancialService causal grounding", () => {
     const fallback = new GroundingRepairFallback();
     const service = new AgenticFinancialService(new CausalAgentProvider(), fallback, {
       referenceDate: "2026-08-16",
+      toolDefinitions: financialToolDefinitions,
+      systemPromptBuilder: buildFinancialAgentSystemPrompt,
+      toolExecutor: executeFinancialTool,
     });
 
     const result = await service.answer("Qual foi minha maior categoria de gastos e por quê?");

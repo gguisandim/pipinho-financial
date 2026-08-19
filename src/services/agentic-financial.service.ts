@@ -16,7 +16,6 @@ import {
   sanitizeFinancialEvidenceGrounding,
 } from "../agent/financial-evidence-grounding.js";
 import {
-  executeFinancialToolSafely,
   executeFinancialToolSafelyAsync,
   type FinancialToolExecutor,
 } from "../agent/financial-tool-guard.js";
@@ -26,9 +25,7 @@ import type {
   AgentTurnTrace,
 } from "../agent/financial-agent.types.js";
 import { normalizeFinancialToolArguments } from "../agent/financial-tool-argument-normalizer.js";
-import { financialToolDefinitions } from "../financial-tools/financial-tools.js";
 import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
-import { buildFinancialAgentSystemPrompt } from "../llm/prompts/financial-agent.prompt.js";
 import {
   FINANCIAL_AGENT_FALLBACK_SYSTEM_PROMPT,
   buildFinancialAgentFallbackPrompt,
@@ -90,18 +87,18 @@ export class AgenticFinancialService {
       maxIterations?: number;
       maxToolCalls?: number;
       referenceDate?: string;
-      toolDefinitions?: ToolDefinition[];
+      toolDefinitions: ToolDefinition[];
       toolDefinitionsSelector?: (
         question: string,
         definitions: ToolDefinition[],
       ) => ToolDefinition[];
-      toolExecutor?: FinancialToolExecutor;
-      systemPromptBuilder?: (referenceDate: string) => string;
+      toolExecutor: FinancialToolExecutor;
+      systemPromptBuilder: (referenceDate: string) => string;
       deterministicToolPlanner?: (
         question: string,
         referenceDate: string,
       ) => { name: string; rawArguments?: string } | null;
-    } = {},
+    },
   ) {}
 
   async answer(question: string) {
@@ -109,12 +106,11 @@ export class AgenticFinancialService {
     const maxToolCalls = this.options.maxToolCalls ?? env.AGENT_MAX_TOOL_CALLS;
     const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
 
-    const allToolDefinitions = this.options.toolDefinitions ?? financialToolDefinitions;
+    const allToolDefinitions = this.options.toolDefinitions;
     const toolDefinitions = this.options.toolDefinitionsSelector
       ? this.options.toolDefinitionsSelector(question, allToolDefinitions)
       : allToolDefinitions;
-    const systemPromptBuilder =
-      this.options.systemPromptBuilder ?? buildFinancialAgentSystemPrompt;
+    const systemPromptBuilder = this.options.systemPromptBuilder;
 
     const messages: ToolCallingMessage[] = [
       {
@@ -163,20 +159,13 @@ export class AgenticFinancialService {
         availablePeriod: null,
       });
       const parsedArguments = parseArgumentsForTrace(effectiveArguments);
-      const execution = this.options.toolExecutor
-        ? await executeFinancialToolSafelyAsync({
-            question,
-            name: deterministicPlan.name,
-            rawArguments: effectiveArguments,
-            referenceDate,
-            executor: this.options.toolExecutor,
-          })
-        : executeFinancialToolSafely({
-            question,
-            name: deterministicPlan.name,
-            rawArguments: effectiveArguments,
-            referenceDate,
-          });
+      const execution = await executeFinancialToolSafelyAsync({
+        question,
+        name: deterministicPlan.name,
+        rawArguments: effectiveArguments,
+        referenceDate,
+        executor: this.options.toolExecutor,
+      });
 
       if (execution.status === "executed") {
         executionMode = "fast_path";
@@ -354,20 +343,13 @@ export class AgenticFinancialService {
               "Use o resultado anterior, mude os argumentos ou escolha outra ferramenta.",
           };
         } else {
-          const execution = this.options.toolExecutor
-            ? await executeFinancialToolSafelyAsync({
-                question,
-                name: toolCall.function.name,
-                rawArguments: effectiveArguments,
-                referenceDate,
-                executor: this.options.toolExecutor,
-              })
-            : executeFinancialToolSafely({
-                question,
-                name: toolCall.function.name,
-                rawArguments: effectiveArguments,
-                referenceDate,
-              });
+          const execution = await executeFinancialToolSafelyAsync({
+            question,
+            name: toolCall.function.name,
+            rawArguments: effectiveArguments,
+            referenceDate,
+            executor: this.options.toolExecutor,
+          });
           outcome = execution.status;
           result = execution.result;
 
