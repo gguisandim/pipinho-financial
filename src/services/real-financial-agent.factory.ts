@@ -1,6 +1,7 @@
 import { env, requireGroqApiKey, requireOpenRouterApiKey } from "../config/env.js";
 import { realFinancialToolDefinitions, RealFinancialToolExecutor } from "../financial-tools/real-financial-tools.js";
 import { createPluggyTransactionRepository } from "../integrations/pluggy/pluggy.factory.js";
+import { routeFinancialTools, selectFinancialToolDefinitions } from "../agent/financial-tool-router.js";
 import { buildRealFinancialAgentSystemPrompt } from "../llm/prompts/financial-real-agent.prompt.js";
 import { GroqProvider } from "../llm/providers/groq.provider.js";
 import { OpenRouterProvider } from "../llm/providers/openrouter.provider.js";
@@ -10,6 +11,18 @@ import { AgenticFinancialService } from "./agentic-financial.service.js";
 import { RealFinancialDataService } from "./real-financial-data.service.js";
 
 export type RealFinancialAgentProvider = "groq" | "openrouter";
+
+function deterministicToolPlan(question: string) {
+  const decision = routeFinancialTools(question);
+  if (decision.intent === "general" || decision.toolNames.length !== 1) {
+    return null;
+  }
+
+  return {
+    name: decision.toolNames[0]!,
+    rawArguments: "{}",
+  };
+}
 
 export function createRealFinancialAgentService(options: {
   provider?: RealFinancialAgentProvider;
@@ -28,8 +41,11 @@ export function createRealFinancialAgentService(options: {
       {
         referenceDate: options.referenceDate,
         toolDefinitions: realFinancialToolDefinitions,
+        toolDefinitionsSelector: (question, definitions) =>
+          selectFinancialToolDefinitions(question, definitions).tools,
         toolExecutor: (name, rawArguments) => toolExecutor.execute(name, rawArguments),
         systemPromptBuilder: buildRealFinancialAgentSystemPrompt,
+        deterministicToolPlanner: (question) => deterministicToolPlan(question),
       },
     );
   }
@@ -41,8 +57,11 @@ export function createRealFinancialAgentService(options: {
     {
       referenceDate: options.referenceDate,
       toolDefinitions: realFinancialToolDefinitions,
+      toolDefinitionsSelector: (question, definitions) =>
+        selectFinancialToolDefinitions(question, definitions).tools,
       toolExecutor: (name, rawArguments) => toolExecutor.execute(name, rawArguments),
       systemPromptBuilder: buildRealFinancialAgentSystemPrompt,
+      deterministicToolPlanner: (question) => deterministicToolPlan(question),
     },
   );
 }

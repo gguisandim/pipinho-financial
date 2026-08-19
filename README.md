@@ -549,3 +549,48 @@ O endpoint de IA recebe apenas agregados/quality metadata e devolve cards estrut
 Detalhes: `docs/CICLO_8_2_QA_DASHBOARD_API.md`.
 
 Os endpoints reais de dashboard ficam protegidos por padrão com `DASHBOARD_REQUIRE_AUTH=true`. Configure `DASHBOARD_API_TOKEN` e envie o token apenas de um cliente server-side/BFF; não embuta o segredo no frontend do navegador.
+
+## v0.9.3 — Tool Quality + Evidence Grounding
+
+A v0.9.3 corrige problemas encontrados pela matriz de QA da v0.9.2 antes de iniciar o frontend. O Agent agora aplica roteamento semântico determinístico para expor apenas as tools relevantes à pergunta, possui tools dedicadas para `spending`, `savings` e série mensal, agrega `alimentação` no backend via `categoryGroup=food`, e adiciona `evidence grounding` para bloquear números e breakdowns que não apareceram em nenhuma tool executada.
+
+A taxonomia também ganhou `financial_charges` para juros, IOF, multas e crédito rotativo reconhecíveis. O dashboard passa a diferenciar a proporção de `other` por quantidade de transações (`otherSpendingTransactionPct`) da proporção por valor (`otherSpendingAmountPct`).
+
+Validação adicional:
+
+```bash
+npm run qa:tools
+npm run qa:precommit
+```
+
+Para incluir também a matriz exploratória remota do Agent:
+
+```bash
+npm run qa:full
+```
+
+Detalhes: `docs/V0_9_3_TOOL_QUALITY.md`.
+
+
+## v0.9.4 — Stability gate
+
+Antes do dashboard visual, a v0.9.4 adiciona normalização determinística de argumentos temporais, retry de Groq para falhas transitórias, diagnostics detalhados do QA Agent, grounding numérico sensível ao arredondamento e refinamento de encargos financeiros. Veja `docs/V0_9_4_STABILITY.md`.
+
+## v0.9.5 — Error Reduction Gate
+
+A v0.9.5 é uma etapa de estabilização, não um novo ciclo funcional. Ela corrige o falso positivo de evidence grounding para perguntas de um único mês, canoniza mês civil/comparações mensais, corrige o typecheck do QA Agent e separa repairs determinísticos de repairs por LLM. Veja `docs/V0_9_5_ERROR_REDUCTION.md`.
+
+## v0.9.6 — Production Hardening / Fast Path
+
+Perguntas financeiras de intenção única agora usam um fast path determinístico:
+`router -> tool local -> LLM de síntese`, eliminando a chamada remota usada apenas para escolher uma tool que o router já conhece. Perguntas ambíguas/multietapa continuam no agent loop normal.
+
+Validação de robustez:
+
+```bash
+npm run qa:precommit
+npm run qa:agent
+npm run qa:soak -- --runs 3
+```
+
+O soak mede pass rate semântico, disponibilidade do provider, P50/P95, retries, repairs e chamadas redundantes. Testes continuam no repositório de desenvolvimento; a limpeza do pacote de produção fica para a etapa de release após o hardening.

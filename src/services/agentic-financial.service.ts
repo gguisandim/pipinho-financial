@@ -12,16 +12,20 @@ import {
   sanitizeFinancialProvenanceGrounding,
 } from "../agent/financial-provenance-grounding.js";
 import {
+  evaluateFinancialEvidenceGrounding,
+  sanitizeFinancialEvidenceGrounding,
+} from "../agent/financial-evidence-grounding.js";
+import {
   executeFinancialToolSafely,
   executeFinancialToolSafelyAsync,
   type FinancialToolExecutor,
-  questionHasTemporalConstraint,
 } from "../agent/financial-tool-guard.js";
 import type {
   AgentTermination,
   AgentToolTrace,
   AgentTurnTrace,
 } from "../agent/financial-agent.types.js";
+import { normalizeFinancialToolArguments } from "../agent/financial-tool-argument-normalizer.js";
 import { financialToolDefinitions } from "../financial-tools/financial-tools.js";
 import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
 import { buildFinancialAgentSystemPrompt } from "../llm/prompts/financial-agent.prompt.js";
@@ -46,6 +50,10 @@ import {
   FINANCIAL_PROVENANCE_REPAIR_SYSTEM_PROMPT,
   buildFinancialProvenanceRepairPrompt,
 } from "../llm/prompts/financial-provenance-repair.prompt.js";
+import {
+  FINANCIAL_FAST_PATH_SYNTHESIS_SYSTEM_PROMPT,
+  buildFinancialFastPathSynthesisPrompt,
+} from "../llm/prompts/financial-fast-path-synthesis.prompt.js";
 
 function parseArgumentsForTrace(rawArguments: string): unknown {
   try {
@@ -55,40 +63,6 @@ function parseArgumentsForTrace(rawArguments: string): unknown {
   }
 }
 
-
-function normalizeDerivedFullPeriodArguments(options: {
-  question: string;
-  name: string;
-  rawArguments: string;
-  availablePeriod: { start: string; end: string } | null;
-}): string {
-  if (!options.availablePeriod || questionHasTemporalConstraint(options.question)) {
-    return options.rawArguments;
-  }
-  if (options.name === "get_financial_period") return options.rawArguments;
-
-  try {
-    const parsed = options.rawArguments.trim()
-      ? JSON.parse(options.rawArguments) as Record<string, unknown>
-      : {};
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return options.rawArguments;
-    }
-
-    if (
-      parsed.startDate === options.availablePeriod.start &&
-      parsed.endDate === options.availablePeriod.end
-    ) {
-      delete parsed.startDate;
-      delete parsed.endDate;
-      return JSON.stringify(parsed);
-    }
-  } catch {
-    return options.rawArguments;
-  }
-
-  return options.rawArguments;
-}
 
 function usageSum(usages: LlmUsage[]): LlmUsage {
   const values = (key: keyof LlmUsage) => usages.map((usage) => usage[key]);
@@ -117,8 +91,16 @@ export class AgenticFinancialService {
       maxToolCalls?: number;
       referenceDate?: string;
       toolDefinitions?: ToolDefinition[];
+      toolDefinitionsSelector?: (
+        question: string,
+        definitions: ToolDefinition[],
+      ) => ToolDefinition[];
       toolExecutor?: FinancialToolExecutor;
       systemPromptBuilder?: (referenceDate: string) => string;
+      deterministicToolPlanner?: (
+        question: string,
+        referenceDate: string,
+      ) => { name: string; rawArguments?: string } | null;
     } = {},
   ) {}
 
@@ -127,7 +109,10 @@ export class AgenticFinancialService {
     const maxToolCalls = this.options.maxToolCalls ?? env.AGENT_MAX_TOOL_CALLS;
     const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
 
-    const toolDefinitions = this.options.toolDefinitions ?? financialToolDefinitions;
+    const allToolDefinitions = this.options.toolDefinitions ?? financialToolDefinitions;
+    const toolDefinitions = this.options.toolDefinitionsSelector
+      ? this.options.toolDefinitionsSelector(question, allToolDefinitions)
+      : allToolDefinitions;
     const systemPromptBuilder =
       this.options.systemPromptBuilder ?? buildFinancialAgentSystemPrompt;
 
@@ -146,13 +131,166 @@ export class AgenticFinancialService {
     let answer: string | null = null;
     let totalToolCalls = 0;
     let discoveredAvailablePeriod: { start: string; end: string } | null = null;
+    let executionMode: "fast_path" | "agent" = "agent";
+    let startIteration = 1;
+    let fastPathSynthesis: {
+      toolName: string;
+      arguments: unknown;
+      result: unknown;
+    } | null = null;
 
-    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    // Fast path: quando o router determinístico conhece exatamente uma tool,
+    // executamos essa tool localmente antes de envolver o modelo. O LLM fica
+    // responsável apenas pela síntese final. Isso reduz uma chamada remota,
+    // elimina tool calls redundantes e mantém o mesmo pipeline de grounding.
+    const deterministicPlan = this.options.deterministicToolPlanner?.(
+      question,
+      referenceDate,
+    );
+
+    if (
+      deterministicPlan &&
+      toolDefinitions.some(
+        (definition) => definition.function.name === deterministicPlan.name,
+      )
+    ) {
+      const rawArguments = deterministicPlan.rawArguments ?? "{}";
+      const effectiveArguments = normalizeFinancialToolArguments({
+        question,
+        name: deterministicPlan.name,
+        rawArguments,
+        referenceDate,
+        availablePeriod: null,
+      });
+      const parsedArguments = parseArgumentsForTrace(effectiveArguments);
+      const execution = this.options.toolExecutor
+        ? await executeFinancialToolSafelyAsync({
+            question,
+            name: deterministicPlan.name,
+            rawArguments: effectiveArguments,
+            referenceDate,
+            executor: this.options.toolExecutor,
+          })
+        : executeFinancialToolSafely({
+            question,
+            name: deterministicPlan.name,
+            rawArguments: effectiveArguments,
+            referenceDate,
+          });
+
+      if (execution.status === "executed") {
+        executionMode = "fast_path";
+        startIteration = 2;
+        totalToolCalls = 1;
+        const syntheticId = "deterministic_route_1";
+        const signature = `${deterministicPlan.name}:${JSON.stringify(parsedArguments)}`;
+        seenCalls.add(signature);
+
+        tools.push({
+          iteration: 1,
+          id: syntheticId,
+          name: deterministicPlan.name,
+          arguments: parsedArguments,
+          outcome: "executed",
+          result: execution.result,
+        });
+        turns.push({
+          iteration: 1,
+          model: "deterministic-tool-router",
+          latencyMs: 0,
+          usage: {},
+          finishReason: "tool_calls",
+          toolCallCount: 1,
+        });
+
+        messages.push({
+          role: "assistant",
+          content: null,
+          toolCalls: [
+            {
+              id: syntheticId,
+              type: "function",
+              function: {
+                name: deterministicPlan.name,
+                arguments: effectiveArguments,
+              },
+            },
+          ],
+        });
+        messages.push({
+          role: "tool",
+          toolCallId: syntheticId,
+          name: deterministicPlan.name,
+          content: JSON.stringify(execution.result),
+        });
+
+        fastPathSynthesis = {
+          toolName: deterministicPlan.name,
+          arguments: parsedArguments,
+          result: execution.result,
+        };
+
+        if (
+          deterministicPlan.name === "get_financial_period" &&
+          execution.result &&
+          typeof execution.result === "object" &&
+          !Array.isArray(execution.result)
+        ) {
+          const candidate = execution.result as {
+            status?: string;
+            start?: unknown;
+            end?: unknown;
+          };
+          if (
+            candidate.status === "ok" &&
+            typeof candidate.start === "string" &&
+            typeof candidate.end === "string"
+          ) {
+            discoveredAvailablePeriod = {
+              start: candidate.start,
+              end: candidate.end,
+            };
+          }
+        }
+      }
+    }
+
+    if (executionMode === "fast_path" && fastPathSynthesis) {
+      // No fast path, não usamos o provider de tool-calling para a síntese.
+      // O router já decidiu e executou a única tool necessária; reexpor schemas
+      // ao modelo adicionava tokens e permitia tool calls espúrias mesmo com
+      // toolChoice=none em alguns providers. A síntese usa o provider textual
+      // simples com um contrato de evidência muito menor.
+      const synthesis = await this.fallbackLlm.complete({
+        system: FINANCIAL_FAST_PATH_SYNTHESIS_SYSTEM_PROMPT,
+        user: buildFinancialFastPathSynthesisPrompt({
+          question,
+          toolName: fastPathSynthesis.toolName,
+          arguments: fastPathSynthesis.arguments,
+          result: fastPathSynthesis.result,
+        }),
+      });
+
+      turns.push({
+        iteration: 2,
+        model: synthesis.model,
+        latencyMs: synthesis.latencyMs,
+        usage: synthesis.usage,
+        finishReason: "stop",
+        toolCallCount: 0,
+      });
+      answer = synthesis.text?.trim() || null;
+      termination = answer ? "model_answer" : "empty_turn_fallback";
+      startIteration = maxIterations + 1;
+    }
+
+    for (let iteration = startIteration; iteration <= maxIterations; iteration += 1) {
       const turn = await this.llm.completeWithTools({
         messages,
         tools: toolDefinitions,
-        toolChoice: iteration === 1 ? "required" : "auto",
-        parallelToolCalls: true,
+        toolChoice:
+          executionMode === "fast_path" ? "none" : iteration === 1 ? "required" : "auto",
+        parallelToolCalls: executionMode === "fast_path" ? false : true,
       });
 
       turns.push({
@@ -183,10 +321,11 @@ export class AgenticFinancialService {
 
       for (const toolCall of turn.toolCalls) {
         totalToolCalls += 1;
-        const effectiveArguments = normalizeDerivedFullPeriodArguments({
+        const effectiveArguments = normalizeFinancialToolArguments({
           question,
           name: toolCall.function.name,
           rawArguments: toolCall.function.arguments,
+          referenceDate,
           availablePeriod: discoveredAvailablePeriod,
         });
         const parsedArguments = parseArgumentsForTrace(effectiveArguments);
@@ -294,6 +433,12 @@ export class AgenticFinancialService {
       applied: boolean;
     } | null = null;
     let provenanceRepair: {
+      model: string;
+      latencyMs: number;
+      usage: LlmUsage;
+      applied: boolean;
+    } | null = null;
+    let evidenceRepair: {
       model: string;
       latencyMs: number;
       usage: LlmUsage;
@@ -452,6 +597,26 @@ export class AgenticFinancialService {
       }
     }
 
+    let evidenceGrounding = answer
+      ? evaluateFinancialEvidenceGrounding(answer, tools)
+      : { passed: true, violations: [] };
+
+    if (answer && !evidenceGrounding.passed) {
+      const startedAt = performance.now();
+      answer = sanitizeFinancialEvidenceGrounding(
+        answer,
+        tools,
+        evidenceGrounding.violations,
+      );
+      evidenceGrounding = evaluateFinancialEvidenceGrounding(answer, tools);
+      evidenceRepair = {
+        model: "deterministic-evidence-sanitizer",
+        latencyMs: Math.round(performance.now() - startedAt),
+        usage: {},
+        applied: true,
+      };
+    }
+
     if (!answer) {
       termination ??= "max_iterations_fallback";
 
@@ -491,10 +656,20 @@ export class AgenticFinancialService {
         );
         provenanceGrounding = evaluateFinancialProvenanceGrounding(answer, tools);
       }
+      evidenceGrounding = evaluateFinancialEvidenceGrounding(answer, tools);
+      if (!evidenceGrounding.passed) {
+        answer = sanitizeFinancialEvidenceGrounding(
+          answer,
+          tools,
+          evidenceGrounding.violations,
+        );
+        evidenceGrounding = evaluateFinancialEvidenceGrounding(answer, tools);
+      }
 
       return {
         question,
         referenceDate,
+        executionMode,
         answer,
         termination,
         iterations: turns.length,
@@ -515,6 +690,11 @@ export class AgenticFinancialService {
             passed: provenanceGrounding.passed,
             repaired: false,
             violations: provenanceGrounding.violations,
+          },
+          evidence: {
+            passed: evidenceGrounding.passed,
+            repaired: false,
+            violations: evidenceGrounding.violations,
           },
         },
         llm: {
@@ -537,6 +717,7 @@ export class AgenticFinancialService {
     return {
       question,
       referenceDate,
+      executionMode,
       answer,
       termination,
       iterations: turns.length,
@@ -558,6 +739,11 @@ export class AgenticFinancialService {
           repaired: provenanceRepair !== null,
           violations: provenanceGrounding.violations,
         },
+        evidence: {
+          passed: evidenceGrounding.passed,
+          repaired: evidenceRepair !== null,
+          violations: evidenceGrounding.violations,
+        },
       },
       llm: {
         agentModel: turns.at(-1)?.model ?? "unknown",
@@ -565,17 +751,20 @@ export class AgenticFinancialService {
         groundingRepair,
         qualityRepair,
         provenanceRepair,
+        evidenceRepair,
         total: {
           latencyMs:
             turns.reduce((total, turn) => total + turn.latencyMs, 0) +
             (groundingRepair?.latencyMs ?? 0) +
             (qualityRepair?.latencyMs ?? 0) +
-            (provenanceRepair?.latencyMs ?? 0),
+            (provenanceRepair?.latencyMs ?? 0) +
+            (evidenceRepair?.latencyMs ?? 0),
           usage: usageSum([
             ...turns.map((turn) => turn.usage),
             ...(groundingRepair ? [groundingRepair.usage] : []),
             ...(qualityRepair ? [qualityRepair.usage] : []),
             ...(provenanceRepair ? [provenanceRepair.usage] : []),
+            ...(evidenceRepair ? [evidenceRepair.usage] : []),
           ]),
         },
       },

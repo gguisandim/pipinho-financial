@@ -73,6 +73,7 @@ function mapProviderCategory(category?: string | null): TransactionCategory | nu
   if (includesAny(value, ["education", "online courses", "university", "school", "kindergarten", "bookstore"])) return "education";
   if (includesAny(value, ["wellness and fitness", "gyms", "fitness centers", "sports practice", "wellness"])) return "fitness";
   if (includesAny(value, ["shopping", "electronics", "clothing", "kids and toys", "sports goods", "office supplies", "pet supplies"])) return "shopping";
+  if (includesAny(value, ["bank fees", "bank fee", "interest", "late fee", "financial charges", "financial tax", "tax on financial operations"])) return "financial_charges";
 
   return null;
 }
@@ -91,6 +92,20 @@ function mapDescription(description: string): TransactionCategory | null {
   if (includesAny(value, ["faculdade", "universidade", "curso", "escola", "livro", "udemy", "alura"])) return "education";
   if (includesAny(value, ["restaurante", "lanchonete", "cafe ", "cafeteria", "burger", "pizza", "sushi"])) return "restaurants";
   if (includesAny(value, ["shopping", "amazon", "mercado livre", "shopee", "roupa", "renner", "riachuelo", "cea "])) return "shopping";
+  if (includesAny(value, [
+    "juros",
+    "iof",
+    "multa por atraso",
+    "multa de atraso",
+    "multa atraso",
+    "juros de mora",
+    "credito rotativo",
+    "rotativo",
+    "encargo financeiro",
+    "encargos financeiros",
+    "tarifa bancaria",
+    "tarifa de atraso",
+  ])) return "financial_charges";
 
   return null;
 }
@@ -100,13 +115,31 @@ function chooseCategory(
   role: TransactionRole,
 ): CategoryDecision {
   const fromProvider = mapProviderCategory(transaction.category);
-  if (fromProvider) {
-    return { category: fromProvider, source: "pluggy", confidence: "high" };
-  }
-
   const fromDescription = mapDescription(
     `${transaction.description} ${transaction.descriptionRaw ?? ""}`,
   );
+
+  if (fromProvider && fromProvider !== "other") {
+    return { category: fromProvider, source: "pluggy", confidence: "high" };
+  }
+
+  // Algumas instituições devolvem uma categoria provider genérica de
+  // transferência/pagamento (`other`) mesmo quando a descrição identifica de
+  // forma inequívoca juros, IOF, multa ou crédito rotativo. Nesse caso específico
+  // a regra local é mais informativa para spending. Não fazemos o mesmo override
+  // para categorias de consumo, para não transformar transferências em compras.
+  if (fromProvider === "other" && fromDescription === "financial_charges") {
+    return {
+      category: "financial_charges",
+      source: "description_rule",
+      confidence: "medium",
+    };
+  }
+
+  if (fromProvider === "other") {
+    return { category: "other", source: "pluggy", confidence: "high" };
+  }
+
   if (fromDescription) {
     return {
       category: fromDescription,

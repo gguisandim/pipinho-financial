@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { TransactionCategory } from "../domain/finance.js";
 import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
-import { RealFinancialDataService } from "../services/real-financial-data.service.js";
+import { RealFinancialDataService, type SpendingCategoryGroup } from "../services/real-financial-data.service.js";
 
 const isoDate = z
   .string()
@@ -27,6 +27,7 @@ const categorySchema = z.enum([
   "education",
   "fitness",
   "shopping",
+  "financial_charges",
   "other",
 ]);
 
@@ -34,8 +35,12 @@ const spendingSchema = z
   .object({
     ...dateRangeShape,
     category: categorySchema.optional(),
+    categoryGroup: z.enum(["food"]).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => !(value.category && value.categoryGroup), {
+    message: "Use category ou categoryGroup, não ambos.",
+  });
 
 const categoryTransactionsSchema = z
   .object({
@@ -52,6 +57,13 @@ const largestExpensesSchema = z
   })
   .strict();
 
+const monthlyTrendSchema = z
+  .object({
+    ...dateRangeShape,
+    months: z.number().int().min(1).max(24).optional().default(12),
+  })
+  .strict();
+
 const institutionSchema = z
   .object({
     ...dateRangeShape,
@@ -62,11 +74,14 @@ const institutionSchema = z
 export type RealFinancialToolName =
   | "get_financial_period"
   | "get_cash_flow"
+  | "get_spending_summary"
+  | "get_savings_status"
   | "get_income"
   | "get_spending_by_category"
   | "get_category_transactions"
   | "get_largest_expenses"
   | "get_spending_by_institution"
+  | "get_monthly_financial_trend"
   | "get_data_capabilities";
 
 const nullableDateProperties = {
@@ -112,6 +127,32 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "get_spending_summary",
+      description:
+        "Retorna somente o spending econômico do período: gastos BANK, compras no cartão, refunds conhecidos e netSpending sem dupla contagem de fatura. Prefira esta tool para perguntas como quanto gastei ou total de gastos.",
+      parameters: {
+        type: "object",
+        properties: nullableDateProperties,
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_savings_status",
+      description:
+        "Retorna o status de poupança/taxa de poupança e a qualidade da renda. Use para perguntas sobre quanto economizei, poupança ou savings rate. Se savings.available=false, responda que a métrica está indisponível e explique o motivo; não use get_data_capabilities para isso.",
+      parameters: {
+        type: "object",
+        properties: nullableDateProperties,
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_income",
       description:
         "Retorna renda confirmada, renda de baixa confiança, entradas bancárias não classificadas e metadados de qualidade. Não trate entradas não classificadas como renda.",
@@ -127,7 +168,7 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_spending_by_category",
       description:
-        "Retorna spending real agregado por categoria após remover dupla contagem de fatura/transferências. category pode ser omitida para comparar todas as categorias.",
+        "Retorna spending real agregado por categoria após remover dupla contagem de fatura/transferências. Para alimentação como conceito amplo, use categoryGroup=food, que agrega groceries + food_delivery + restaurants no backend. category pode ser omitida para comparar todas as categorias.",
       parameters: {
         type: "object",
         properties: {
@@ -148,6 +189,7 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
                   "education",
                   "fitness",
                   "shopping",
+                  "financial_charges",
                   "other",
                 ],
               },
@@ -155,6 +197,14 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
             ],
             description:
               "Categoria canônica. Use null ou omita quando não houver categoria específica.",
+          },
+          categoryGroup: {
+            anyOf: [
+              { type: "string", enum: ["food"] },
+              { type: "null" },
+            ],
+            description:
+              "Grupo determinístico de categorias. food = groceries + food_delivery + restaurants. Não use junto com category.",
           },
         },
         additionalProperties: false,
@@ -185,6 +235,7 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
               "education",
               "fitness",
               "shopping",
+              "financial_charges",
               "other",
             ],
           },
@@ -240,9 +291,28 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "get_monthly_financial_trend",
+      description:
+        "Retorna série mensal determinística de liquidez, spending, renda com qualidade e savings. Use para evolução mensal, tendência, comparação entre meses ou gráficos temporais; não invente meses fora dos pontos retornados.",
+      parameters: {
+        type: "object",
+        properties: {
+          ...nullableDateProperties,
+          months: {
+            type: ["number", "null"],
+            description: "Quantidade de meses retornados, de 1 a 24. Padrão 12.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_data_capabilities",
       description:
-        "Informa campos, análises, limitações e qualidade do dataset Pluggy atual. Use antes de responder sobre saldos, investimentos, empréstimos ou outra dimensão ainda não integrada. Não aceita argumentos.",
+        "Informa campos, análises, limitações e qualidade do dataset Pluggy atual. Use apenas para dimensões ainda não integradas, como saldo bancário atual, investimentos, empréstimos ou projeção de fatura. NÃO use para spending, renda, poupança/savings, categorias, instituições ou tendência mensal, pois existem tools específicas. Não aceita argumentos.",
       parameters: {
         type: "object",
         properties: {},
@@ -280,6 +350,16 @@ export class RealFinancialToolExecutor {
         return this.data.getCashFlow(args);
       }
 
+      case "get_spending_summary": {
+        const args = dateRangeSchema.parse(raw);
+        return this.data.getSpendingSummary(args);
+      }
+
+      case "get_savings_status": {
+        const args = dateRangeSchema.parse(raw);
+        return this.data.getSavingsStatus(args);
+      }
+
       case "get_income": {
         const args = dateRangeSchema.parse(raw);
         return this.data.getIncome(args);
@@ -290,6 +370,7 @@ export class RealFinancialToolExecutor {
         return this.data.getSpendingByCategory({
           ...args,
           category: args.category as TransactionCategory | undefined,
+          categoryGroup: args.categoryGroup as SpendingCategoryGroup | undefined,
         });
       }
 
@@ -309,6 +390,11 @@ export class RealFinancialToolExecutor {
       case "get_spending_by_institution": {
         const args = institutionSchema.parse(raw);
         return this.data.getSpendingByInstitution(args);
+      }
+
+      case "get_monthly_financial_trend": {
+        const args = monthlyTrendSchema.parse(raw);
+        return this.data.getMonthlySeries(args);
       }
 
       case "get_data_capabilities":

@@ -112,6 +112,24 @@ describe("RealFinancialDataService", () => {
     expect(result.evidenceScope.rawTransactionsSentToLlm).toBe(false);
   });
 
+  it("expõe uma tool de spending enxuta sem breakdown de categoria", async () => {
+    const result = await service().getSpendingSummary();
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.spending.netSpending).toBe(150);
+    expect(result.evidenceScope.categoryBreakdownIncluded).toBe(false);
+    expect("income" in result).toBe(false);
+  });
+
+  it("expõe savings por contrato dedicado", async () => {
+    const result = await service().getSavingsStatus();
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.savings.available).toBe(true);
+    expect(result.income.quality).toBe("reliable");
+    expect(result.evidenceScope.savingsMustRespectAvailableFlag).toBe(true);
+  });
+
   it("compara spending por instituição", async () => {
     const result = await service().getSpendingByInstitution();
     expect(result.status).toBe("ok");
@@ -119,6 +137,45 @@ describe("RealFinancialDataService", () => {
     expect(result.institutions).toEqual([
       { institution: "Nubank", amount: 100, transactionCount: 1 },
       { institution: "PicPay", amount: 50, transactionCount: 1 },
+    ]);
+  });
+
+  it("agrega alimentação no backend sem delegar soma ao LLM", async () => {
+    const foodService = new RealFinancialDataService(
+      new MemoryRepository([
+        tx({
+          id: "food-grocery",
+          amount: 30,
+          type: "debit",
+          category: "groceries",
+          metadata: { source: "pluggy", institution: "Nubank", accountType: "BANK", role: "bank_outflow", status: "posted" },
+        }),
+        tx({
+          id: "food-delivery",
+          amount: 20,
+          type: "debit",
+          category: "food_delivery",
+          metadata: { source: "pluggy", institution: "Nubank", accountType: "CREDIT", role: "card_purchase", status: "posted" },
+        }),
+        tx({
+          id: "food-restaurant",
+          amount: 10,
+          type: "debit",
+          category: "restaurants",
+          metadata: { source: "pluggy", institution: "PicPay", accountType: "BANK", role: "bank_outflow", status: "posted" },
+        }),
+      ]),
+    );
+
+    const result = await foodService.getSpendingByCategory({ categoryGroup: "food" });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.categoryGroup).toBe("food");
+    expect(result.totalSpendingInReturnedCategories).toBe(60);
+    expect(result.categories.map((entry) => entry.category).sort()).toEqual([
+      "food_delivery",
+      "groceries",
+      "restaurants",
     ]);
   });
 

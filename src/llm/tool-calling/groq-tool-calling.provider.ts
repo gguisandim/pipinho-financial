@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Groq from "groq-sdk";
 import { env, requireGroqApiKey } from "../../config/env.js";
+import { withLlmRetry } from "../providers/llm-retry.js";
 import type {
   NormalizedToolCall,
   ToolCallingLlmProvider,
@@ -209,20 +210,27 @@ export class GroqToolCallingProvider implements ToolCallingLlmProvider {
     try {
       // O cast fica somente na fronteira do SDK. Internamente mantemos nosso
       // contrato normalizado, independente do provider.
-      const completion = await this.client.chat.completions.create({
-        model: this.model,
-        temperature: 0,
-        reasoning_effort: "low",
-        max_completion_tokens: 1000,
-        messages: toGroqMessages(request.messages) as never,
-        ...(request.tools
-          ? {
-              tools: request.tools as never,
-              tool_choice: request.toolChoice ?? "auto",
-              parallel_tool_calls: request.parallelToolCalls ?? true,
-            }
-          : {}),
-      });
+      const completion = await withLlmRetry(
+        () =>
+          this.client.chat.completions.create({
+            model: this.model,
+            temperature: 0,
+            reasoning_effort: "low",
+            max_completion_tokens: 1000,
+            messages: toGroqMessages(request.messages) as never,
+            ...(request.tools
+              ? {
+                  tools: request.tools as never,
+                  tool_choice: request.toolChoice ?? "auto",
+                  parallel_tool_calls: request.parallelToolCalls ?? true,
+                }
+              : {}),
+          }),
+        {
+          maxRetries: env.GROQ_REQUEST_RETRIES,
+          baseDelayMs: env.GROQ_RETRY_BASE_MS,
+        },
+      );
 
       const latencyMs = Math.round(performance.now() - startedAt);
       const choice = completion.choices[0];

@@ -6,6 +6,7 @@ import type {
   StructuredLlmRequest,
   StructuredLlmResponse,
 } from "./structured-llm-provider.js";
+import { withLlmRetry } from "./llm-retry.js";
 
 export class GroqStructuredProvider implements StructuredLlmProvider {
   private readonly client: Groq;
@@ -20,23 +21,30 @@ export class GroqStructuredProvider implements StructuredLlmProvider {
     const jsonSchema = z.toJSONSchema(request.schema);
     const startedAt = performance.now();
 
-    const completion = await this.client.chat.completions.create({
-      model: env.GROQ_STRUCTURED_MODEL,
-      temperature: 0,
-      max_completion_tokens: request.maxCompletionTokens ?? 2400,
-      messages: [
-        { role: "system", content: request.system },
-        { role: "user", content: request.user },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: request.schemaName,
-          strict: true,
-          schema: jsonSchema,
-        },
+    const completion = await withLlmRetry(
+      () =>
+        this.client.chat.completions.create({
+          model: env.GROQ_STRUCTURED_MODEL,
+          temperature: 0,
+          max_completion_tokens: request.maxCompletionTokens ?? 2400,
+          messages: [
+            { role: "system", content: request.system },
+            { role: "user", content: request.user },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: request.schemaName,
+              strict: true,
+              schema: jsonSchema,
+            },
+          },
+        }),
+      {
+        maxRetries: env.GROQ_REQUEST_RETRIES,
+        baseDelayMs: env.GROQ_RETRY_BASE_MS,
       },
-    });
+    );
 
     const latencyMs = Math.round(performance.now() - startedAt);
     const rawText = completion.choices[0]?.message?.content ?? "";

@@ -80,7 +80,8 @@ async function main() {
 
   console.log("\n--- QUALIDADE ---");
   console.log(`Entradas de baixa confiança: ${analysis.diagnostics.lowConfidenceIncomeTransactions}`);
-  console.log(`Spending em other:           ${analysis.diagnostics.otherSpendingTransactions} (${analysis.diagnostics.otherSpendingPct.toFixed(1)}%)`);
+  console.log(`Spending em other:           ${analysis.diagnostics.otherSpendingTransactions} tx (${analysis.diagnostics.otherSpendingTransactionPct.toFixed(1)}% das tx; ${analysis.diagnostics.otherSpendingAmountPct.toFixed(1)}% do valor)`);
+  console.log(`Encargos financeiros:        ${analysis.diagnostics.financialChargesTransactions} tx (${analysis.diagnostics.financialChargesPct.toFixed(1)}% do valor)`);
 
   if (analysis.diagnostics.unclassifiedCardCredits > 0) {
     console.log("  aviso: créditos de cartão não reconhecidos como estorno/cashback não foram subtraídos do spending para evitar assumir uma semântica incorreta.");
@@ -92,7 +93,7 @@ async function main() {
     console.log("  aviso: a renda está parcialmente classificada; savings rate deve ser tratado como estimativa.");
   }
 
-  if (analysis.diagnostics.otherSpendingPct > 40) {
+  if (analysis.diagnostics.otherSpendingAmountPct > 40) {
     console.log("  aviso: muitas despesas continuam em `other`; a qualidade de categorias ainda pode ser melhorada sem alterar a lógica anti-dupla-contagem.");
   }
 

@@ -1,0 +1,31 @@
+export const FINANCIAL_FAST_PATH_SYNTHESIS_SYSTEM_PROMPT = `Você redige uma resposta curta de finanças pessoais a partir de UM resultado de ferramenta já executado pelo backend.
+
+REGRAS OBRIGATÓRIAS:
+- Use somente os fatos e números presentes no JSON recebido.
+- Não invente categorias, instituições, meses, causas, saldos, renda, savings ou percentuais ausentes do JSON.
+- Não faça novos cálculos financeiros; apenas descreva resultados já calculados.
+- Não exponha nome interno de tool, endpoint, schema, token, itemId ou accountId.
+- A Pluggy é fonte de dados; classificação, anti-dupla-contagem e métricas são produzidas pelo backend/Financial Engine.
+- Se income.quality=insufficient, não trate estimativas como renda factual.
+- Se savings.available=false, diga que poupança/taxa está indisponível e use o motivo fornecido.
+- Se status=no_data, explique que não há dados no período pedido e, se availablePeriod existir, informe apenas esse intervalo como contexto.
+- Não acrescente tabela ou breakdown de dimensão que não esteja explicitamente no JSON.
+- Ao traduzir categorias canônicas, use somente: housing=moradia; groceries=supermercado/mercearia; food_delivery=entrega de comida; transport=transporte; utilities=contas/serviços; subscriptions=assinaturas; health=saúde; restaurants=restaurantes; education=educação; fitness=academia/fitness; shopping=compras; financial_charges=encargos financeiros; other=outros. Não invente outro rótulo.
+- Responda em português do Brasil, de forma objetiva.`;
+
+export function buildFinancialFastPathSynthesisPrompt(input: {
+  question: string;
+  toolName: string;
+  arguments: unknown;
+  result: unknown;
+}): string {
+  return `Pergunta do usuário:\n${input.question}\n\nResultado estruturado autorizado:\n${JSON.stringify(
+    {
+      operation: input.toolName,
+      arguments: input.arguments,
+      result: input.result,
+    },
+    null,
+    2,
+  )}\n\nProduza a resposta final sem adicionar nenhum fato ou número externo ao JSON.`;
+}

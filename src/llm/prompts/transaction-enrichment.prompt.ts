@@ -17,6 +17,7 @@ CATEGORIAS:
 - education: escola, faculdade, cursos, livros e educação
 - fitness: academia, esporte e fitness
 - shopping: varejo, roupas, eletrônicos, marketplaces e compras gerais
+- financial_charges: juros, IOF, multa por atraso, crédito rotativo, mora, tarifas e encargos financeiros
 - other: ambíguo ou sem evidência suficiente
 
 REGRAS DE SEGURANÇA/QUALIDADE:

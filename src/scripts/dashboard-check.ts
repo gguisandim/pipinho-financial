@@ -28,7 +28,9 @@ if (overview.status !== "ok") {
   console.log(`institution points:  ${overview.institutions.length}`);
   console.log(`signals:             ${overview.signals.length}`);
   console.log(`income quality:      ${overview.quality.incomeQuality}`);
-  console.log(`other spending:      ${overview.quality.otherSpendingPct.toFixed(2)}%`);
+  console.log(`other tx share:      ${overview.quality.otherSpendingTransactionPct.toFixed(2)}%`);
+  console.log(`other amount share:  ${overview.quality.otherSpendingAmountPct.toFixed(2)}%`);
+  console.log(`financial charges:   ${overview.quality.financialChargesPct.toFixed(2)}% do valor gasto`);
   console.log(`savings available:   ${overview.quality.savingsAvailable ? "sim" : "não"}`);
   console.log(`raw tx in response:  ${overview.privacy.rawTransactionsIncluded ? "sim" : "não"}`);
 

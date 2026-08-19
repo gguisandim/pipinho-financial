@@ -12,6 +12,9 @@ export const DashboardMetricRefSchema = z.enum([
   "income.totalIncomeEstimate",
   "income.classifiedCoveragePct",
   "quality.otherSpendingPct",
+  "quality.otherSpendingAmountPct",
+  "quality.financialChargesAmount",
+  "quality.financialChargesPct",
   "quality.unclassifiedCardCredits",
   "quality.truncatedAccounts",
   "savings.estimatedSavings",
@@ -29,6 +32,7 @@ export const DashboardInsightCardSchema = z.object({
   uiAction: z.enum([
     "open_monthly",
     "open_spending_categories",
+    "open_financial_charges",
     "open_institutions",
     "open_income_review",
     "open_quality",

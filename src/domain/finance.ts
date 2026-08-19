@@ -13,6 +13,7 @@ export type TransactionCategory =
   | "education"
   | "fitness"
   | "shopping"
+  | "financial_charges"
   | "other";
 
 export type TransactionSource = "synthetic" | "pluggy";

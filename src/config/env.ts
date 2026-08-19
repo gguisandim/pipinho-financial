@@ -19,6 +19,9 @@ const envSchema = z.object({
   GROQ_TOOL_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
   GROQ_FINAL_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
   GROQ_AGENT_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
+  // Resiliência do provider: somente erros transitórios (429/5xx/rede).
+  GROQ_REQUEST_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  GROQ_RETRY_BASE_MS: z.coerce.number().int().min(100).max(10000).default(750),
 
   OPENROUTER_API_KEY: optionalEnvString,
   OPENROUTER_AGENT_MODEL: z.string().min(1).default("openrouter/free"),

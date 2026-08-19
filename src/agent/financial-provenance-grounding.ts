@@ -108,11 +108,14 @@ export function sanitizeFinancialProvenanceGrounding(
   const toolLabels: Record<string, string> = {
     get_financial_period: "a consulta do período disponível",
     get_cash_flow: "a análise de fluxo financeiro",
+    get_spending_summary: "a análise do total de gastos",
+    get_savings_status: "a análise de poupança",
     get_income: "a análise de renda",
     get_spending_by_category: "a análise por categoria",
     get_category_transactions: "a composição da categoria",
     get_largest_expenses: "a análise dos maiores gastos",
     get_spending_by_institution: "a comparação por instituição",
+    get_monthly_financial_trend: "a análise de evolução mensal",
     get_data_capabilities: "a verificação dos dados disponíveis",
   };
 

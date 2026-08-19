@@ -1,3 +1,4 @@
+import { routeFinancialTools } from "../agent/financial-tool-router.js";
 import { createRealFinancialAgentService, type RealFinancialAgentProvider } from "../services/real-financial-agent.factory.js";
 
 const rawArgs = process.argv.slice(2);
@@ -17,13 +18,16 @@ const question =
   rawArgs.join(" ").trim() ||
   "Analise meus gastos no período disponível e destaque os pontos mais relevantes, respeitando as limitações de qualidade dos dados.";
 
+const route = routeFinancialTools(question);
 const service = createRealFinancialAgentService({ provider });
 const result = await service.answer(question);
 
 console.log("=== CICLO 7: REAL FINANCIAL AGENT ===");
 console.log(`Provider: ${provider}`);
 console.log(`Pergunta: ${question}`);
-console.log(`Data de referência: ${result.referenceDate}\n`);
+console.log(`Data de referência: ${result.referenceDate}`);
+console.log(`Roteamento: ${route.intent} → ${route.toolNames.join(", ")}`);
+console.log(`Modo de execução: ${result.executionMode}\n`);
 
 console.log("--- passos do agente ---");
 for (const turn of result.turns) {

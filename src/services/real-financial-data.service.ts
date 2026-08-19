@@ -16,6 +16,13 @@ import type {
   TransactionRepositorySnapshot,
 } from "../repositories/transaction.repository.js";
 
+
+export type SpendingCategoryGroup = "food";
+
+const SPENDING_CATEGORY_GROUPS: Record<SpendingCategoryGroup, TransactionCategory[]> = {
+  food: ["groceries", "food_delivery", "restaurants"],
+};
+
 function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -26,7 +33,14 @@ export interface RealFinancialDataQuality {
   classifiedIncomeCoveragePct: number | null;
   savingsAvailable: boolean;
   savingsUnavailableReason: string | null;
+  /** Percentual por quantidade de transações em other; legado para compatibilidade. */
   otherSpendingPct: number;
+  otherSpendingTransactionPct: number;
+  otherSpendingAmount: number;
+  otherSpendingAmountPct: number;
+  financialChargesTransactions: number;
+  financialChargesAmount: number;
+  financialChargesPct: number;
   unclassifiedCardCredits: number;
   truncatedAccounts: number;
 }
@@ -132,6 +146,59 @@ export class RealFinancialDataService {
     };
   }
 
+  async getSpendingSummary(range: DateRange = {}) {
+    const result = await this.getCashFlow(range);
+    if (result.status !== "ok") return result;
+
+    return {
+      status: "ok" as const,
+      source: result.source,
+      period: result.period,
+      transactionCount: result.transactionCount,
+      spending: result.spending,
+      quality: {
+        otherSpendingPct: result.quality.otherSpendingPct,
+        otherSpendingAmountPct: result.quality.otherSpendingAmountPct,
+        financialChargesAmount: result.quality.financialChargesAmount,
+        financialChargesPct: result.quality.financialChargesPct,
+        unclassifiedCardCredits: result.quality.unclassifiedCardCredits,
+      },
+      evidenceScope: {
+        spendingAvoidsCreditCardDoubleCount: true,
+        doubleCountHandledBy: "financial_engine",
+        categoryBreakdownIncluded: false,
+        institutionBreakdownIncluded: false,
+        rawTransactionsSentToLlm: false,
+      },
+    };
+  }
+
+  async getSavingsStatus(range: DateRange = {}) {
+    const result = await this.getCashFlow(range);
+    if (result.status !== "ok") return result;
+
+    return {
+      status: "ok" as const,
+      source: result.source,
+      period: result.period,
+      savings: result.savings,
+      income: {
+        quality: result.income.quality,
+        confirmedIncome: result.income.confirmedIncome,
+        estimatedIncome: result.income.estimatedIncome,
+        confirmedTransactionCount: result.income.confirmedTransactionCount,
+        estimatedTransactionCount: result.income.estimatedTransactionCount,
+        classifiedIncomeShareOfBankInflowsPct:
+          result.income.classifiedIncomeShareOfBankInflowsPct,
+      },
+      evidenceScope: {
+        savingsMustRespectAvailableFlag: true,
+        incomeEstimateMustRespectQuality: true,
+        rawTransactionsSentToLlm: false,
+      },
+    };
+  }
+
   async getIncome(range: DateRange = {}) {
     const { snapshot, transactions } = await this.selected(range);
     if (transactions.length === 0) {
@@ -164,7 +231,10 @@ export class RealFinancialDataService {
   }
 
   async getSpendingByCategory(
-    options: DateRange & { category?: TransactionCategory } = {},
+    options: DateRange & {
+      category?: TransactionCategory;
+      categoryGroup?: SpendingCategoryGroup;
+    } = {},
   ) {
     const { snapshot, transactions } = await this.selected(options);
     if (transactions.length === 0) {
@@ -181,6 +251,9 @@ export class RealFinancialDataService {
     let categories = analysis.spending.expensesByCategory;
     if (options.category) {
       categories = categories.filter((entry) => entry.category === options.category);
+    } else if (options.categoryGroup) {
+      const allowed = new Set(SPENDING_CATEGORY_GROUPS[options.categoryGroup]);
+      categories = categories.filter((entry) => allowed.has(entry.category));
     }
 
     if (categories.length === 0) {
@@ -189,10 +262,13 @@ export class RealFinancialDataService {
         source: snapshot.source,
         requestedPeriod: options,
         category: options.category ?? null,
+        categoryGroup: options.categoryGroup ?? null,
         availablePeriod: getAvailablePeriod(snapshot.transactions),
         message: options.category
           ? `Não existem gastos classificados em ${options.category} no período solicitado.`
-          : "Não existem gastos no período solicitado.",
+          : options.categoryGroup
+            ? `Não existem gastos no grupo ${options.categoryGroup} no período solicitado.`
+            : "Não existem gastos no período solicitado.",
       };
     }
 
@@ -202,11 +278,15 @@ export class RealFinancialDataService {
       source: snapshot.source,
       period: analysis.period,
       category: options.category ?? null,
+      categoryGroup: options.categoryGroup ?? null,
       totalSpendingInReturnedCategories: round2(total),
       categories,
       quality: {
-        otherSpendingPct: analysis.diagnostics.otherSpendingPct,
-        categoryCoveragePct: round2(100 - analysis.diagnostics.otherSpendingPct),
+        otherSpendingTransactionPct: analysis.diagnostics.otherSpendingTransactionPct,
+        otherSpendingAmountPct: analysis.diagnostics.otherSpendingAmountPct,
+        categoryCoveragePct: round2(100 - analysis.diagnostics.otherSpendingAmountPct),
+        financialChargesAmount: analysis.diagnostics.financialChargesAmount,
+        financialChargesPct: analysis.diagnostics.financialChargesPct,
       },
       evidenceScope: {
         supportsQuantitativeComparison: true,
@@ -215,6 +295,9 @@ export class RealFinancialDataService {
         sampleLimited: false,
         categoryTotalsAreGrossBeforeUnallocatedCardRefunds: true,
         compositionTool: "get_category_transactions",
+        categoryGroupDefinition: options.categoryGroup
+          ? SPENDING_CATEGORY_GROUPS[options.categoryGroup]
+          : null,
       },
     };
   }
@@ -435,7 +518,7 @@ export class RealFinancialDataService {
 
     return {
       status: "ok" as const,
-      source: "pluggy",
+      source: snapshot.source,
       availablePeriod: period,
       availableTransactionFields: [
         "date",
@@ -458,6 +541,8 @@ export class RealFinancialDataService {
         "category_transactions_sample",
         "largest_expenses",
         "spending_by_institution",
+        "monthly_financial_trend",
+        "financial_charges_category",
         "savings_when_income_quality_allows",
       ],
       notIntegratedInCurrentAgent: [
@@ -488,6 +573,12 @@ export class RealFinancialDataService {
       savingsAvailable: analysis.savings.available,
       savingsUnavailableReason: analysis.savings.unavailableReason,
       otherSpendingPct: analysis.diagnostics.otherSpendingPct,
+      otherSpendingTransactionPct: analysis.diagnostics.otherSpendingTransactionPct,
+      otherSpendingAmount: analysis.diagnostics.otherSpendingAmount,
+      otherSpendingAmountPct: analysis.diagnostics.otherSpendingAmountPct,
+      financialChargesTransactions: analysis.diagnostics.financialChargesTransactions,
+      financialChargesAmount: analysis.diagnostics.financialChargesAmount,
+      financialChargesPct: analysis.diagnostics.financialChargesPct,
       unclassifiedCardCredits: analysis.diagnostics.unclassifiedCardCredits,
       truncatedAccounts: snapshot.diagnostics.truncatedAccounts ?? 0,
     };

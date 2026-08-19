@@ -268,3 +268,79 @@ describe("AgenticFinancialService normalização de período derivado", () => {
     expect(received[1]?.args).toBe("{}");
   });
 });
+
+class FastPathSynthesisAgent implements ToolCallingLlmProvider {
+  readonly requests: ToolCallingRequest[] = [];
+
+  async completeWithTools(request: ToolCallingRequest): Promise<ToolCallingTurnResponse> {
+    this.requests.push(request);
+    return {
+      text: "Em julho você gastou R$ 100,00.",
+      toolCalls: [],
+      finishReason: "stop",
+      provider: "fake",
+      model: "fake",
+      latencyMs: 1,
+      usage: {},
+    };
+  }
+}
+
+describe("AgenticFinancialService deterministic fast path", () => {
+  it("executa a tool conhecida antes do LLM e força síntese sem novas tool calls", async () => {
+    const agent = new FastPathSynthesisAgent();
+    let calls = 0;
+    const service = new AgenticFinancialService(agent, fallback, {
+      referenceDate: "2026-08-19",
+      toolDefinitions: [
+        {
+          type: "function",
+          function: {
+            name: "get_spending_summary",
+            description: "teste",
+            parameters: {
+              type: "object",
+              properties: {
+                startDate: { type: ["string", "null"] },
+                endDate: { type: ["string", "null"] },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      ],
+      deterministicToolPlanner: () => ({
+        name: "get_spending_summary",
+        rawArguments: "{}",
+      }),
+      toolExecutor: async (_name, rawArguments) => {
+        calls += 1;
+        expect(JSON.parse(rawArguments)).toEqual({
+          startDate: "2026-07-01",
+          endDate: "2026-07-31",
+        });
+        return {
+          status: "ok",
+          source: "pluggy",
+          period: { start: "2026-07-01", end: "2026-07-31" },
+          spending: { netSpending: 100 },
+        };
+      },
+      systemPromptBuilder: () => "prompt real",
+    });
+
+    const result = await service.answer("Quanto eu gastei em julho?");
+
+    expect(result.executionMode).toBe("fast_path");
+    expect(calls).toBe(1);
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.name).toBe("get_spending_summary");
+    expect(result.turns).toHaveLength(2);
+    expect(result.turns[0]?.model).toBe("deterministic-tool-router");
+    // O fast path não reexpõe schemas ao provider de tool-calling. A síntese
+    // final usa o provider textual simples, eliminando tool calls espúrias.
+    expect(agent.requests).toHaveLength(0);
+    expect(result.turns[1]?.toolCallCount).toBe(0);
+    expect(result.grounding.evidence.passed).toBe(true);
+  });
+});

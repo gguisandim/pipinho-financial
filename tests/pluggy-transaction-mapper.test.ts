@@ -117,4 +117,31 @@ describe("mapPluggyTransaction", () => {
     expect(result.transaction.category).toBe("other");
     expect(result.transaction.metadata?.role).toBe("bank_inflow");
   });
+  it("permite que encargo financeiro explícito refine provider category genérica", () => {
+    const result = mapPluggyTransaction(
+      {
+        id: "tx-charge-provider-other",
+        accountId: "account-1",
+        description: "Juros de dívida encerrada",
+        currencyCode: "BRL",
+        amount: 25,
+        date: "2026-08-08T12:00:00.000Z",
+        status: "POSTED",
+        type: "DEBIT",
+        category: "Credit card payment",
+      },
+      {
+        account: account("BANK"),
+        institution: "Nubank",
+        itemId: "item-1",
+        timeZone: "America/Sao_Paulo",
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transaction.category).toBe("financial_charges");
+    expect(result.transaction.metadata?.categorySource).toBe("description_rule");
+  });
+
 });

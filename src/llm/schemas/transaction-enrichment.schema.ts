@@ -12,6 +12,7 @@ export const ExpenseEnrichmentCategorySchema = z.enum([
   "education",
   "fitness",
   "shopping",
+  "financial_charges",
   "other",
 ]);
 

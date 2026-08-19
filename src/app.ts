@@ -11,7 +11,7 @@ export function buildApp(options: {
 
   app.get("/", async () => ({
     name: "finance-llm-lab",
-    version: "0.9.2",
+    version: "0.9.3",
     status: "running",
     architecture: "deterministic-financial-engine + guarded-llm-agent",
     endpoints: {
@@ -29,7 +29,7 @@ export function buildApp(options: {
     },
   }));
 
-  app.get("/health", async () => ({ status: "ok", version: "0.9.2" }));
+  app.get("/health", async () => ({ status: "ok", version: "0.9.3" }));
 
   void app.register(financeRoutes);
   void app.register(aiRoutes);

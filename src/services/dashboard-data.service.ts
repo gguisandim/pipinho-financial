@@ -181,6 +181,9 @@ export class DashboardDataService {
       "income.totalIncomeEstimate": { value: overview.metrics.income.totalIncomeEstimate, unit: "BRL" },
       "income.classifiedCoveragePct": { value: overview.metrics.income.classifiedIncomeShareOfBankInflowsPct, unit: "percent" },
       "quality.otherSpendingPct": { value: overview.quality.otherSpendingPct, unit: "percent" },
+      "quality.otherSpendingAmountPct": { value: overview.quality.otherSpendingAmountPct, unit: "percent" },
+      "quality.financialChargesAmount": { value: overview.quality.financialChargesAmount, unit: "BRL" },
+      "quality.financialChargesPct": { value: overview.quality.financialChargesPct, unit: "percent" },
       "quality.unclassifiedCardCredits": { value: overview.quality.unclassifiedCardCredits, unit: "count" },
       "quality.truncatedAccounts": { value: overview.quality.truncatedAccounts, unit: "count" },
       "savings.estimatedSavings": { value: overview.metrics.savings.estimatedSavings, unit: "BRL" },
@@ -195,6 +198,9 @@ export class DashboardDataService {
     income: { quality: "reliable" | "partial" | "insufficient" };
     quality: {
       otherSpendingPct: number;
+      otherSpendingAmountPct: number;
+      financialChargesAmount: number;
+      financialChargesPct: number;
       unclassifiedCardCredits: number;
       truncatedAccounts: number;
     };
@@ -243,14 +249,25 @@ export class DashboardDataService {
       });
     }
 
-    if (input.quality.otherSpendingPct >= 30) {
+    if (input.quality.otherSpendingAmountPct >= 30) {
       signals.push({
         id: "category-coverage",
         code: "high_other_spending",
-        severity: input.quality.otherSpendingPct >= 50 ? "critical" : "warning",
+        severity: input.quality.otherSpendingAmountPct >= 50 ? "critical" : "warning",
         title: "Cobertura de categorias limitada",
-        message: "Uma parcela relevante dos gastos permanece em other; comparações por categoria devem exibir essa limitação.",
-        metricRefs: ["quality.otherSpendingPct"],
+        message: "Uma parcela relevante do valor gasto permanece em other; comparações por categoria devem exibir essa limitação.",
+        metricRefs: ["quality.otherSpendingAmountPct"],
+      });
+    }
+
+    if (input.quality.financialChargesPct >= 5) {
+      signals.push({
+        id: "financial-charges",
+        code: "high_financial_charges",
+        severity: input.quality.financialChargesPct >= 10 ? "warning" : "info",
+        title: "Encargos financeiros relevantes",
+        message: "Juros, IOF, multas ou encargos representam uma parcela mensurável dos gastos do período.",
+        metricRefs: ["quality.financialChargesAmount", "quality.financialChargesPct"],
       });
     }
 

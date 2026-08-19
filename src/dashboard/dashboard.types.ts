@@ -14,6 +14,9 @@ export type DashboardMetricRef =
   | "income.totalIncomeEstimate"
   | "income.classifiedCoveragePct"
   | "quality.otherSpendingPct"
+  | "quality.otherSpendingAmountPct"
+  | "quality.financialChargesAmount"
+  | "quality.financialChargesPct"
   | "quality.unclassifiedCardCredits"
   | "quality.truncatedAccounts"
   | "savings.estimatedSavings"
@@ -26,6 +29,7 @@ export interface DashboardSignal {
     | "income_quality_insufficient"
     | "income_quality_partial"
     | "high_other_spending"
+    | "high_financial_charges"
     | "unclassified_card_credits"
     | "truncated_accounts";
   severity: DashboardSeverity;

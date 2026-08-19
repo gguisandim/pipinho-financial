@@ -76,6 +76,16 @@ describe("DashboardInsightService", () => {
                 metricRefs: ["liquidity.netBankCashFlow"],
                 confidence: "high",
               },
+              {
+                priority: "low",
+                kind: "context",
+                title: "Encargos financeiros",
+                message: "Há encargos financeiros relevantes no período observado.",
+                suggestedAction: "Abra a categoria de encargos para revisar a composição.",
+                uiAction: "open_financial_charges",
+                metricRefs: ["quality.financialChargesPct"],
+                confidence: "low",
+              },
             ],
           }),
           rawText: "{}",
@@ -96,6 +106,8 @@ describe("DashboardInsightService", () => {
     expect(capturedPrompt).not.toContain("DESCRICAO SENSIVEL");
     expect(capturedPrompt).not.toContain("PIX PESSOA PRIVADA");
     expect(result.cards[0]?.evidence[0]?.ref).toBe("liquidity.netBankCashFlow");
+    expect(result.cards).toHaveLength(1);
+    expect(result.cards.some((card) => card.uiAction === "open_financial_charges")).toBe(false);
     expect(result.privacy.rawTransactionsSentToLlm).toBe(false);
   });
 });

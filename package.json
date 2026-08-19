@@ -1,6 +1,6 @@
 {
   "name": "finance-llm-lab",
-  "version": "0.9.2",
+  "version": "0.9.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -33,13 +33,17 @@
     "enrichment:inspect": "tsx src/scripts/cycle8.ts --no-llm --show-descriptions",
     "enrichment:classify": "tsx src/scripts/cycle8.ts",
     "qa:local": "npm run typecheck && npm test",
-    "qa:critical": "vitest run tests/financial-real-views.test.ts tests/real-financial-data-service.test.ts tests/real-financial-data-service-retry.test.ts tests/real-data-audit.test.ts tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts tests/financial-quality-grounding.test.ts tests/financial-provenance-grounding.test.ts tests/financial-tool-guard.test.ts tests/agentic-real-tool-executor.test.ts",
+    "qa:critical": "vitest run tests/financial-real-views.test.ts tests/real-financial-data-service.test.ts tests/real-financial-data-service-retry.test.ts tests/real-data-audit.test.ts tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts tests/financial-quality-grounding.test.ts tests/financial-provenance-grounding.test.ts tests/financial-evidence-grounding.test.ts tests/financial-tool-guard.test.ts tests/financial-tool-router.test.ts tests/financial-charges-category.test.ts tests/agentic-real-tool-executor.test.ts tests/llm-retry.test.ts tests/financial-tool-argument-normalizer.test.ts",
     "qa:real": "tsx src/scripts/audit-real.ts",
     "qa:agent": "tsx src/scripts/audit-agent.ts",
     "api:dev": "tsx watch src/server.ts",
     "qa:dashboard": "vitest run tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts",
     "dashboard:check": "tsx src/scripts/dashboard-check.ts",
-    "dashboard:token": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    "dashboard:token": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    "qa:tools": "vitest run tests/financial-tool-router.test.ts tests/financial-tool-argument-normalizer.test.ts tests/real-financial-tools.test.ts tests/agentic-real-tool-executor.test.ts tests/financial-evidence-grounding.test.ts tests/financial-charges-category.test.ts",
+    "qa:precommit": "npm run qa:local && npm run qa:real && npm run qa:dashboard && npm run dashboard:check && npm run qa:tools",
+    "qa:full": "npm run qa:precommit && npm run qa:agent",
+    "qa:soak": "tsx src/scripts/audit-agent-soak.ts"
   },
   "dependencies": {
     "dotenv": "latest",

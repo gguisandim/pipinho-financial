@@ -186,14 +186,19 @@ export function auditRealSnapshot(snapshot: TransactionRepositorySnapshot): {
   checks.push({
     id: "category-coverage",
     status:
-      analysis.diagnostics.otherSpendingPct < 30
+      analysis.diagnostics.otherSpendingAmountPct < 30
         ? "pass"
-        : analysis.diagnostics.otherSpendingPct < 60
+        : analysis.diagnostics.otherSpendingAmountPct < 60
           ? "warn"
           : "fail",
-    message: `${analysis.diagnostics.otherSpendingPct.toFixed(2)}% do spending está em other.`,
+    message:
+      `${analysis.diagnostics.otherSpendingAmountPct.toFixed(2)}% do valor de spending está em other ` +
+      `(${analysis.diagnostics.otherSpendingTransactionPct.toFixed(2)}% das transações de gasto).`,
     details: {
       otherSpendingTransactions: analysis.diagnostics.otherSpendingTransactions,
+      otherSpendingAmount: analysis.diagnostics.otherSpendingAmount,
+      otherSpendingTransactionPct: analysis.diagnostics.otherSpendingTransactionPct,
+      otherSpendingAmountPct: analysis.diagnostics.otherSpendingAmountPct,
     },
   });
 
@@ -210,8 +215,14 @@ export function auditRealSnapshot(snapshot: TransactionRepositorySnapshot): {
     status: financialChargeLikeOther.length === 0 ? "pass" : "warn",
     message:
       financialChargeLikeOther.length === 0
-        ? "Nenhum padrão óbvio de encargo financeiro ficou preso em other."
-        : `${financialChargeLikeOther.length} gastos em other parecem juros/IOF/multa. A taxonomia merece uma categoria de encargos financeiros.`,
+        ? `Encargos financeiros possuem categoria própria; ${analysis.diagnostics.financialChargesTransactions} transações foram classificadas nela.`
+        : `${financialChargeLikeOther.length} gastos em other ainda parecem juros/IOF/multa e precisam de regra adicional.`,
+    details: {
+      classifiedTransactions: analysis.diagnostics.financialChargesTransactions,
+      classifiedAmount: analysis.diagnostics.financialChargesAmount,
+      classifiedAmountPct: analysis.diagnostics.financialChargesPct,
+      remainingChargeLikeOther: financialChargeLikeOther.length,
+    },
   });
 
   checks.push({

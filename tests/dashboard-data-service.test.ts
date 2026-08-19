@@ -82,6 +82,21 @@ const transactions: Transaction[] = [
       status: "posted",
     },
   },
+  {
+    id: "charge-aug",
+    date: "2026-08-08",
+    description: "Juros crédito rotativo",
+    amount: 100,
+    type: "debit",
+    category: "financial_charges",
+    metadata: {
+      source: "pluggy",
+      institution: "Nubank",
+      role: "card_purchase",
+      status: "posted",
+      categorySource: "description_rule",
+    },
+  },
 ];
 
 class MemoryRepository implements TransactionRepository {
@@ -120,7 +135,7 @@ describe("DashboardDataService", () => {
     expect(result.schemaVersion).toBe("1.0");
     expect(result.dataset.availablePeriod).toEqual({
       start: "2026-07-05",
-      end: "2026-08-07",
+      end: "2026-08-08",
     });
     expect(result.monthly.status).toBe("ok");
     if (result.monthly.status === "ok") {
@@ -132,6 +147,10 @@ describe("DashboardDataService", () => {
     expect(result.categories[0]?.sharePct).toBeGreaterThan(0);
     expect(result.institutions.some((item) => item.institution === "PicPay")).toBe(true);
     expect(result.privacy.rawTransactionsIncluded).toBe(false);
+    expect(
+      result.signals.some((signal) => signal.code === "high_financial_charges"),
+    ).toBe(true);
+    expect(result.quality.financialChargesAmount).toBe(100);
   });
 
   it("resolve metricRefs sem deixar o LLM fabricar o valor", async () => {

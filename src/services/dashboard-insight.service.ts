@@ -45,7 +45,13 @@ export class DashboardInsightService {
     // Acrescenta referências úteis mesmo quando não há um signal específico.
     allowedRefs.add("spending.netSpending");
     allowedRefs.add("liquidity.netBankCashFlow");
-    allowedRefs.add("quality.otherSpendingPct");
+    if (overview.quality.otherSpendingAmountPct > 0) {
+      allowedRefs.add("quality.otherSpendingAmountPct");
+    }
+    if (overview.quality.financialChargesAmount > 0) {
+      allowedRefs.add("quality.financialChargesAmount");
+      allowedRefs.add("quality.financialChargesPct");
+    }
 
     const llmResult = await this.llm.completeStructured<DashboardInsights>({
       system: DASHBOARD_INSIGHTS_SYSTEM_PROMPT,

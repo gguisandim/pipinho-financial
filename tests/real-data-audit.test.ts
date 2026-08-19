@@ -71,6 +71,47 @@ describe("auditRealSnapshot", () => {
     expect(result.checks.find((check) => check.id === "anti-double-count-diagnostics")?.status).toBe("pass");
   });
 
+  it("mede cobertura de categoria pelo valor e não apenas pela quantidade", () => {
+    const base = snapshot();
+    base.transactions = [
+      {
+        id: "other-large",
+        date: "2026-08-01",
+        description: "Despesa não classificada",
+        amount: 1000,
+        type: "debit",
+        category: "other",
+        metadata: {
+          source: "pluggy",
+          institution: "Nubank",
+          role: "card_purchase",
+          status: "posted",
+        },
+      },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        id: `known-${index}`,
+        date: "2026-08-02",
+        description: "Mercado",
+        amount: 1,
+        type: "debit" as const,
+        category: "groceries" as const,
+        metadata: {
+          source: "pluggy" as const,
+          institution: "Nubank",
+          role: "card_purchase" as const,
+          status: "posted" as const,
+        },
+      })),
+    ];
+    base.diagnostics.rawTransactions = base.transactions.length;
+    base.diagnostics.mappedTransactions = base.transactions.length;
+
+    const result = auditRealSnapshot(base);
+    const coverage = result.checks.find((check) => check.id === "category-coverage");
+    expect(coverage?.status).toBe("fail");
+    expect(coverage?.message).toContain("do valor de spending");
+  });
+
   it("falha para IDs duplicados e PENDING vazando no histórico", () => {
     const bad = snapshot();
     bad.transactions.push({

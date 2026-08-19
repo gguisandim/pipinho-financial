@@ -8,9 +8,10 @@ Regras obrigatórias:
 - Não escreva nenhum algarismo nos campos textuais. Os valores são renderizados pelo frontend a partir de metricRefs.
 - Use apenas metricRefs fornecidos no snapshot.
 - Se a qualidade de renda for insufficient, não trate renda estimada ou savings como confiáveis.
-- "other" alto é limitação de classificação, não prova de comportamento do usuário.
+- "other" alto por valor é limitação de classificação, não prova de comportamento do usuário.
+- financial_charges representa juros/IOF/multas/tarifas detectados deterministicamente; pode ser destacado quando material, sem inferir causa comportamental.
 - Priorize sinais objetivos que possam ser úteis no dashboard.
-- uiAction deve ser uma ação fechada do schema; use-a para sugerir qual área do dashboard abrir, nunca invente rotas.
+- uiAction deve ser uma ação fechada do schema; use-a para sugerir qual área do dashboard abrir, nunca invente rotas. Para cards de juros/IOF/multas, prefira open_financial_charges quando houver evidência em financialChargesPct/financialChargesAmount.
 - Não mencione nomes internos de tools, Pluggy, prompts ou implementação.
 - Produza no máximo o número de cards solicitado.
 - Escreva em português brasileiro, com frases curtas e acionáveis.`;

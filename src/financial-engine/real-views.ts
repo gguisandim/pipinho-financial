@@ -37,7 +37,14 @@ export interface FinancialViewDiagnostics {
   unclassifiedCardCredits: number;
   lowConfidenceIncomeTransactions: number;
   otherSpendingTransactions: number;
+  /** Percentual por quantidade de transações; mantido por compatibilidade. */
   otherSpendingPct: number;
+  otherSpendingTransactionPct: number;
+  otherSpendingAmount: number;
+  otherSpendingAmountPct: number;
+  financialChargesTransactions: number;
+  financialChargesAmount: number;
+  financialChargesPct: number;
 }
 
 export interface FinancialViewsAnalysis {
@@ -325,9 +332,30 @@ export function analyzeFinancialViews(
     .map(([category, amount]) => ({ category, amount: round2(amount) }))
     .sort((a, b) => b.amount - a.amount);
 
-  const otherSpendingTransactions = spendingTransactions.filter(
+  const otherSpendingRows = spendingTransactions.filter(
     ({ transaction }) => transaction.category === "other",
-  ).length;
+  );
+  const otherSpendingTransactions = otherSpendingRows.length;
+  const otherSpendingAmount = otherSpendingRows.reduce(
+    (sum, { transaction }) => sum + transaction.amount,
+    0,
+  );
+  const otherSpendingTransactionPct =
+    spendingTransactions.length > 0
+      ? (otherSpendingTransactions / spendingTransactions.length) * 100
+      : 0;
+  const otherSpendingAmountPct =
+    grossSpending > 0 ? (otherSpendingAmount / grossSpending) * 100 : 0;
+
+  const financialChargeRows = spendingTransactions.filter(
+    ({ transaction }) => transaction.category === "financial_charges",
+  );
+  const financialChargesAmount = financialChargeRows.reduce(
+    (sum, { transaction }) => sum + transaction.amount,
+    0,
+  );
+  const financialChargesPct =
+    grossSpending > 0 ? (financialChargesAmount / grossSpending) * 100 : 0;
 
   const internalTransfersExcluded = classified.filter(
     ({ kind }) => kind === "internal_transfer",
@@ -448,10 +476,13 @@ export function analyzeFinancialViews(
       unclassifiedCardCredits,
       lowConfidenceIncomeTransactions: estimatedIncomeTransactions.length,
       otherSpendingTransactions,
-      otherSpendingPct:
-        spendingTransactions.length > 0
-          ? round2((otherSpendingTransactions / spendingTransactions.length) * 100)
-          : 0,
+      otherSpendingPct: round2(otherSpendingTransactionPct),
+      otherSpendingTransactionPct: round2(otherSpendingTransactionPct),
+      otherSpendingAmount: round2(otherSpendingAmount),
+      otherSpendingAmountPct: round2(otherSpendingAmountPct),
+      financialChargesTransactions: financialChargeRows.length,
+      financialChargesAmount: round2(financialChargesAmount),
+      financialChargesPct: round2(financialChargesPct),
     },
   };
 }

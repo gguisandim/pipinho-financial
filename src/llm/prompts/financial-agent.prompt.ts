@@ -30,5 +30,7 @@ ESTRATÉGIA:
 - Perguntas amplas podem exigir mais de uma ferramenta.
 - Chamadas paralelas são permitidas quando independentes.
 - Continue chamando ferramentas enquanto ainda faltar informação necessária e houver uma ação útil possível.
+- Não repita uma tool apenas para ampliar um intervalo que já cobre exatamente os meses pedidos. Se get_monthly_financial_trend já devolveu todos os meses explicitamente solicitados, responda com esse resultado.
+- Para perguntas factuais de um único período, como "quanto gastei em julho", o total retornado pela tool daquele período é evidência suficiente; não transforme isso em uma série mensal nem peça uma tool mensal sem necessidade.
 - Quando já houver evidência suficiente, pare de chamar ferramentas e responda em português do Brasil, de forma objetiva.`;
 }
