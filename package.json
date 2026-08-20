@@ -15,7 +15,7 @@
     "enrichment:inspect": "tsx src/scripts/cycle8.ts --no-llm --show-descriptions",
     "enrichment:classify": "tsx src/scripts/cycle8.ts",
     "qa:local": "npm run typecheck && npm test",
-    "qa:critical": "vitest run tests/financial-real-views.test.ts tests/real-financial-data-service.test.ts tests/real-financial-data-service-retry.test.ts tests/real-data-audit.test.ts tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts tests/financial-quality-grounding.test.ts tests/financial-provenance-grounding.test.ts tests/financial-evidence-grounding.test.ts tests/financial-tool-guard.test.ts tests/financial-tool-router.test.ts tests/financial-charges-category.test.ts tests/agentic-real-tool-executor.test.ts tests/llm-retry.test.ts tests/financial-tool-argument-normalizer.test.ts tests/assistant-routes.test.ts",
+    "qa:critical": "vitest run tests/conversational-agent-service.test.ts tests/conversation-context.test.ts tests/financial-real-views.test.ts tests/real-financial-data-service.test.ts tests/real-financial-data-service-retry.test.ts tests/real-data-audit.test.ts tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts tests/financial-quality-grounding.test.ts tests/financial-provenance-grounding.test.ts tests/financial-evidence-grounding.test.ts tests/financial-tool-guard.test.ts tests/financial-tool-router.test.ts tests/financial-charges-category.test.ts tests/agentic-real-tool-executor.test.ts tests/llm-retry.test.ts tests/financial-tool-argument-normalizer.test.ts tests/assistant-routes.test.ts",
     "qa:real": "tsx src/scripts/audit-real.ts",
     "qa:agent": "tsx src/scripts/audit-agent.ts",
     "qa:dashboard": "vitest run tests/dashboard-data-service.test.ts tests/dashboard-routes.test.ts tests/dashboard-insight-service.test.ts tests/assistant-routes.test.ts",
@@ -36,11 +36,11 @@
     "clean:dist": "node scripts/clean-dist.mjs",
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web run build",
-    "web:typecheck": "npm --prefix web run typecheck"
+    "web:typecheck": "npm --prefix web run typecheck",
+    "qa:conversation": "vitest run tests/conversational-agent-service.test.ts tests/conversation-context.test.ts tests/financial-tool-router.test.ts tests/financial-tool-argument-normalizer.test.ts tests/real-financial-data-service.test.ts tests/real-financial-tools.test.ts tests/assistant-routes.test.ts",
+    "qa:conversation:real": "tsx src/scripts/audit-conversation.ts"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.3",
     "dotenv": "17.4.2",
     "fastify": "5.12.0",
     "groq-sdk": "1.5.0",

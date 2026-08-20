@@ -51,3 +51,34 @@ describe("financial tool router", () => {
     expect(route.toolNames).toEqual(["get_data_capabilities"]);
   });
 });
+
+describe("financial tool router - Cycle 11 natural language", () => {
+  it("responde saudação sem forçar consulta financeira", () => {
+    const route = routeFinancialTools("oi");
+    expect(route.intent).toBe("conversation");
+    expect(route.toolNames).toEqual([]);
+  });
+
+  it("roteia último gasto para transações recentes", () => {
+    const route = routeFinancialTools("qual foi meu último gasto?");
+    expect(route.intent).toBe("recent_transactions");
+    expect(route.toolNames).toEqual(["get_recent_transactions"]);
+  });
+
+  it("roteia busca textual por Uber", () => {
+    const route = routeFinancialTools("quanto foi aquele Uber de ontem?");
+    expect(route.intent).toBe("transaction_search");
+    expect(route.toolNames).toEqual(["search_transactions"]);
+  });
+
+  it("roteia média por dia para resumo diário", () => {
+    const route = routeFinancialTools("quanto eu costumo gastar por dia?");
+    expect(route.intent).toBe("daily_spending");
+    expect(route.toolNames).toEqual(["get_daily_spending_summary"]);
+  });
+
+  it("trata quanto tenho como dimensão de saldo ainda não integrada", () => {
+    const route = routeFinancialTools("quanto eu tenho agora?");
+    expect(route.intent).toBe("capabilities");
+  });
+});

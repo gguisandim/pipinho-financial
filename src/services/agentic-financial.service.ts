@@ -17,6 +17,7 @@ import {
 } from "../agent/financial-evidence-grounding.js";
 import {
   executeFinancialToolSafelyAsync,
+  questionHasTemporalConstraint,
   type FinancialToolExecutor,
 } from "../agent/financial-tool-guard.js";
 import type {
@@ -24,7 +25,14 @@ import type {
   AgentToolTrace,
   AgentTurnTrace,
 } from "../agent/financial-agent.types.js";
-import { normalizeFinancialToolArguments } from "../agent/financial-tool-argument-normalizer.js";
+import {
+  normalizeFinancialToolArguments,
+} from "../agent/financial-tool-argument-normalizer.js";
+import {
+  buildContextualRoutingQuestion,
+  sanitizeConversationHistory,
+  type ConversationHistoryMessage,
+} from "../agent/conversation-context.js";
 import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
 import {
   FINANCIAL_AGENT_FALLBACK_SYSTEM_PROMPT,
@@ -101,14 +109,25 @@ export class AgenticFinancialService {
     },
   ) {}
 
-  async answer(question: string) {
+  async answer(
+    question: string,
+    context: {
+      history?: ConversationHistoryMessage[];
+      conversationId?: string;
+    } = {},
+  ) {
     const maxIterations = this.options.maxIterations ?? env.AGENT_MAX_ITERATIONS;
     const maxToolCalls = this.options.maxToolCalls ?? env.AGENT_MAX_TOOL_CALLS;
     const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
+    const history = sanitizeConversationHistory(context.history, 10);
+    const routingQuestion = buildContextualRoutingQuestion(question, history);
+    const groundingQuestion = questionHasTemporalConstraint(question)
+      ? question
+      : routingQuestion;
 
     const allToolDefinitions = this.options.toolDefinitions;
     const toolDefinitions = this.options.toolDefinitionsSelector
-      ? this.options.toolDefinitionsSelector(question, allToolDefinitions)
+      ? this.options.toolDefinitionsSelector(routingQuestion, allToolDefinitions)
       : allToolDefinitions;
     const systemPromptBuilder = this.options.systemPromptBuilder;
 
@@ -117,6 +136,11 @@ export class AgenticFinancialService {
         role: "system",
         content: systemPromptBuilder(referenceDate),
       },
+      ...history.map<ToolCallingMessage>((message) =>
+        message.role === "assistant"
+          ? { role: "assistant", content: message.content }
+          : { role: "user", content: message.content },
+      ),
       { role: "user", content: question },
     ];
 
@@ -127,7 +151,8 @@ export class AgenticFinancialService {
     let answer: string | null = null;
     let totalToolCalls = 0;
     let discoveredAvailablePeriod: { start: string; end: string } | null = null;
-    let executionMode: "fast_path" | "agent" = "agent";
+    let executionMode: "fast_path" | "agent" | "conversation" =
+      toolDefinitions.length === 0 ? "conversation" : "agent";
     let startIteration = 1;
     let fastPathSynthesis: {
       toolName: string;
@@ -140,7 +165,7 @@ export class AgenticFinancialService {
     // responsável apenas pela síntese final. Isso reduz uma chamada remota,
     // elimina tool calls redundantes e mantém o mesmo pipeline de grounding.
     const deterministicPlan = this.options.deterministicToolPlanner?.(
-      question,
+      routingQuestion,
       referenceDate,
     );
 
@@ -152,7 +177,7 @@ export class AgenticFinancialService {
     ) {
       const rawArguments = deterministicPlan.rawArguments ?? "{}";
       const effectiveArguments = normalizeFinancialToolArguments({
-        question,
+        question: groundingQuestion,
         name: deterministicPlan.name,
         rawArguments,
         referenceDate,
@@ -160,7 +185,7 @@ export class AgenticFinancialService {
       });
       const parsedArguments = parseArgumentsForTrace(effectiveArguments);
       const execution = await executeFinancialToolSafelyAsync({
-        question,
+        question: groundingQuestion,
         name: deterministicPlan.name,
         rawArguments: effectiveArguments,
         referenceDate,
@@ -276,10 +301,16 @@ export class AgenticFinancialService {
     for (let iteration = startIteration; iteration <= maxIterations; iteration += 1) {
       const turn = await this.llm.completeWithTools({
         messages,
-        tools: toolDefinitions,
+        tools: toolDefinitions.length > 0 ? toolDefinitions : undefined,
         toolChoice:
-          executionMode === "fast_path" ? "none" : iteration === 1 ? "required" : "auto",
-        parallelToolCalls: executionMode === "fast_path" ? false : true,
+          toolDefinitions.length === 0
+            ? "auto"
+            : executionMode === "fast_path"
+              ? "none"
+              : iteration === 1
+                ? "required"
+                : "auto",
+        parallelToolCalls: toolDefinitions.length > 0 && executionMode !== "fast_path",
       });
 
       turns.push({
@@ -311,7 +342,7 @@ export class AgenticFinancialService {
       for (const toolCall of turn.toolCalls) {
         totalToolCalls += 1;
         const effectiveArguments = normalizeFinancialToolArguments({
-          question,
+          question: groundingQuestion,
           name: toolCall.function.name,
           rawArguments: toolCall.function.arguments,
           referenceDate,
@@ -344,7 +375,7 @@ export class AgenticFinancialService {
           };
         } else {
           const execution = await executeFinancialToolSafelyAsync({
-            question,
+            question: groundingQuestion,
             name: toolCall.function.name,
             rawArguments: effectiveArguments,
             referenceDate,
@@ -652,6 +683,11 @@ export class AgenticFinancialService {
         question,
         referenceDate,
         executionMode,
+        conversation: {
+          id: context.conversationId ?? null,
+          historyMessagesUsed: history.length,
+          contextualRouting: routingQuestion !== question,
+        },
         answer,
         termination,
         iterations: turns.length,
@@ -700,6 +736,11 @@ export class AgenticFinancialService {
       question,
       referenceDate,
       executionMode,
+      conversation: {
+        id: context.conversationId ?? null,
+        historyMessagesUsed: history.length,
+        contextualRouting: routingQuestion !== question,
+      },
       answer,
       termination,
       iterations: turns.length,

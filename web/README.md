@@ -127,15 +127,22 @@ user_preferences
 
 Antes disso, adicionar essas tabelas só aumentaria a superfície do sistema sem necessidade.
 
-## Limitação conhecida do chat
+## Ciclo 11 — contexto conversacional curto
 
-O endpoint atual recebe apenas:
+O endpoint do assistente agora aceita `conversationId` e até 10 mensagens anteriores:
 
 ```json
-{ "question": "..." }
+{
+  "question": "E mês passado?",
+  "conversationId": "...",
+  "history": [
+    { "role": "user", "content": "Quanto eu gastei este mês?" },
+    { "role": "assistant", "content": "..." }
+  ]
+}
 ```
 
-Logo, cada envio é tratado como uma pergunta independente. A interface mantém o histórico visual apenas durante a sessão da página, mas o backend ainda não possui `conversationId` nem memória de turnos anteriores.
+Isso permite follow-ups curtos sem transformar o histórico em fonte de verdade financeira. Números continuam precisando ser sustentados por tools executadas na resposta atual. A persistência das conversas no Supabase ainda não foi implementada; nesta etapa o contexto vive na sessão aberta do chat.
 
 ## Ciclo 10 — filtros mensais
 

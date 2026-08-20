@@ -23,6 +23,9 @@ const DATE_RANGE_TOOLS = new Set([
   "get_largest_expenses",
   "get_spending_by_institution",
   "get_monthly_financial_trend",
+  "get_recent_transactions",
+  "search_transactions",
+  "get_daily_spending_summary",
 ]);
 
 function normalizeText(value: string): string {
@@ -39,6 +42,27 @@ function monthEnd(year: number, month: number): string {
 
 function monthStart(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}-01`;
+}
+
+function isoFromDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function utcDate(iso: string): Date {
+  return new Date(`${iso}T00:00:00.000Z`);
+}
+
+function addDays(iso: string, days: number): string {
+  const date = utcDate(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoFromDate(date);
+}
+
+function startOfIsoWeek(iso: string): string {
+  const date = utcDate(iso);
+  const weekday = date.getUTCDay();
+  const delta = weekday === 0 ? -6 : 1 - weekday;
+  return addDays(iso, delta);
 }
 
 function explicitYears(question: string): number[] {
@@ -61,9 +85,6 @@ function asksWholeNamedMonth(question: string): boolean {
   const months = [...new Set(namedMonths(question))];
   if (months.length !== 1) return false;
 
-  // Se o usuário delimitou dias/partes do mês, preservamos os argumentos para
-  // que o guard valide o intervalo específico. Sem esse refinamento, "em julho"
-  // significa o mês civil completo.
   if (/\bdia\s+\d{1,2}\b/.test(q)) return false;
   if (/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(q)) return false;
   if (/\b(desde|ate|entre|antes|depois|quinzena|inicio|fim|primeiros?|ultimos?)\b/.test(q)) {
@@ -73,16 +94,76 @@ function asksWholeNamedMonth(question: string): boolean {
   return true;
 }
 
+function relativeRange(question: string, referenceDate: string): {
+  startDate: string;
+  endDate: string;
+} | null {
+  const q = normalizeText(question);
+  const referenceYear = Number(referenceDate.slice(0, 4));
+  const referenceMonth = Number(referenceDate.slice(5, 7));
+
+  // Ordem importa: expressões mais específicas vêm antes das genéricas.
+  if (/\b(anteontem)\b/.test(q)) {
+    const day = addDays(referenceDate, -2);
+    return { startDate: day, endDate: day };
+  }
+
+  if (/\b(ontem)\b/.test(q)) {
+    const day = addDays(referenceDate, -1);
+    return { startDate: day, endDate: day };
+  }
+
+  if (/\b(hoje)\b/.test(q)) {
+    return { startDate: referenceDate, endDate: referenceDate };
+  }
+
+  if (/\b(mes passado|ultimo mes|mes anterior)\b/.test(q)) {
+    const previous = new Date(Date.UTC(referenceYear, referenceMonth - 2, 1));
+    const year = previous.getUTCFullYear();
+    const month = previous.getUTCMonth() + 1;
+    return { startDate: monthStart(year, month), endDate: monthEnd(year, month) };
+  }
+
+  if (/\b(este mes|nesse mes|neste mes|mes atual)\b/.test(q)) {
+    return {
+      startDate: monthStart(referenceYear, referenceMonth),
+      endDate: referenceDate,
+    };
+  }
+
+  if (/\b(semana passada|ultima semana|semana anterior)\b/.test(q)) {
+    const thisMonday = startOfIsoWeek(referenceDate);
+    const previousMonday = addDays(thisMonday, -7);
+    return { startDate: previousMonday, endDate: addDays(previousMonday, 6) };
+  }
+
+  if (/\b(esta semana|nessa semana|nesta semana|semana atual)\b/.test(q)) {
+    return { startDate: startOfIsoWeek(referenceDate), endDate: referenceDate };
+  }
+
+  const lastDays = /\b(?:ultimos?|ultimas?)\s+(\d{1,3})\s+dias?\b/.exec(q);
+  if (lastDays?.[1]) {
+    const days = Math.min(Math.max(Number(lastDays[1]), 1), 366);
+    return {
+      startDate: addDays(referenceDate, -(days - 1)),
+      endDate: referenceDate,
+    };
+  }
+
+  return null;
+}
+
 function inferredRange(question: string, referenceDate: string): {
   startDate: string;
   endDate: string;
 } | null {
+  const relative = relativeRange(question, referenceDate);
+  if (relative) return relative;
+
   const years = explicitYears(question);
   const months = namedMonths(question);
   const referenceYear = Number(referenceDate.slice(0, 4));
 
-  // Um mês nomeado sem ano usa o ano da data de referência, regra já adotada
-  // pelo guard. Para dois meses no mesmo pedido, cobrimos o intervalo entre eles.
   if (months.length > 0) {
     const year = years.length === 1 ? years[0]! : referenceYear;
     const first = Math.min(...months);
@@ -93,7 +174,6 @@ function inferredRange(question: string, referenceDate: string): {
     };
   }
 
-  // Ano explícito sem mês: a pergunta é sobre o ano inteiro.
   if (years.length === 1) {
     const year = years[0]!;
     return {
@@ -125,13 +205,10 @@ export function normalizeFinancialToolArguments(options: {
   const parsed = parseObject(options.rawArguments);
   if (!parsed) return options.rawArguments;
 
-  // Null do provider tem semântica de "omitido" nas tools financeiras.
   for (const [key, value] of Object.entries(parsed)) {
     if (value === null) delete parsed[key];
   }
 
-  // Se o modelo apenas copiou a cobertura descoberta em uma pergunta sem
-  // período, removemos a data derivada antes do guard de grounding.
   if (
     options.availablePeriod &&
     parsed.startDate === options.availablePeriod.start &&
@@ -140,7 +217,7 @@ export function normalizeFinancialToolArguments(options: {
     const q = normalizeText(options.question);
     const hasTemporalQuestion =
       namedMonths(q).length > 0 || explicitYears(q).length > 0 ||
-      /\b(hoje|ontem|semana|mes|meses|ano|anos|trimestre|semestre|periodo|desde|ate|entre|ultimo|ultimos|ultima|ultimas)\b/.test(q);
+      /\b(hoje|ontem|anteontem|semana|mes|meses|ano|anos|trimestre|semestre|periodo|desde|ate|entre|ultimo|ultimos|ultima|ultimas)\b/.test(q);
     if (!hasTemporalQuestion) {
       delete parsed.startDate;
       delete parsed.endDate;
@@ -148,24 +225,24 @@ export function normalizeFinancialToolArguments(options: {
   }
 
   if (DATE_RANGE_TOOLS.has(options.name)) {
-    const range = inferredRange(options.question, options.referenceDate);
+    const normalizedQuestion = normalizeText(options.question);
+    const dailyBaselineComparison =
+      options.name === "get_daily_spending_summary" &&
+      /\b(gastei muito|gastei acima|gastei mais que o normal|fora do normal|acima do normal)\b/.test(
+        normalizedQuestion,
+      );
+    const range = dailyBaselineComparison
+      ? null
+      : inferredRange(options.question, options.referenceDate);
     if (range) {
-      // Para um mês civil completo explicitamente pedido ("em julho"), o
-      // intervalo é determinístico e não deve depender do provider. Isso evita
-      // subcontagem silenciosa caso o modelo gere 02→30 em vez de 01→31.
       if (asksWholeNamedMonth(options.question)) {
         parsed.startDate = range.startDate;
         parsed.endDate = range.endDate;
       } else {
-        // Nos demais casos, só preenche o que o provider omitiu.
         if (typeof parsed.startDate !== "string") parsed.startDate = range.startDate;
         if (typeof parsed.endDate !== "string") parsed.endDate = range.endDate;
       }
 
-      // Comparações explícitas entre meses têm um intervalo determinístico na
-      // própria pergunta. Para a tool mensal, canonicamos o intervalo completo
-      // e o número de pontos para evitar chamadas como junho→agosto quando o
-      // usuário perguntou apenas junho versus julho.
       if (options.name === "get_monthly_financial_trend") {
         const months = [...new Set(namedMonths(options.question))];
         if (months.length >= 2) {
@@ -182,6 +259,21 @@ export function normalizeFinancialToolArguments(options: {
     const asksFood = /\b(alimentacao|comida|alimentar)\b/.test(q);
     if (asksFood && parsed.category === undefined && parsed.categoryGroup === undefined) {
       parsed.categoryGroup = "food";
+    }
+  }
+
+  if (options.name === "get_recent_transactions") {
+    const q = normalizeText(options.question);
+    if (parsed.kind === undefined) {
+      if (/\b(gasto|gastos|compra|compras|despesa|despesas|comprei|paguei)\b/.test(q)) {
+        parsed.kind = "spending";
+      } else if (/\b(recebi|renda|salario|entrada|entradas)\b/.test(q)) {
+        parsed.kind = "income";
+      }
+    }
+
+    if (parsed.limit === undefined && /\b(ultimo gasto|ultima compra|ultima transacao|ultima movimentacao)\b/.test(q)) {
+      parsed.limit = 1;
     }
   }
 

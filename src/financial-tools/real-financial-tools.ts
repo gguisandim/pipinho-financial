@@ -71,6 +71,25 @@ const institutionSchema = z
   })
   .strict();
 
+const transactionKindSchema = z.enum(["all", "spending", "income"]);
+
+const recentTransactionsSchema = z
+  .object({
+    ...dateRangeShape,
+    limit: z.number().int().min(1).max(20).optional().default(5),
+    kind: transactionKindSchema.optional().default("all"),
+  })
+  .strict();
+
+const searchTransactionsSchema = z
+  .object({
+    ...dateRangeShape,
+    query: z.string().trim().min(2).max(100),
+    limit: z.number().int().min(1).max(20).optional().default(10),
+    kind: transactionKindSchema.optional().default("all"),
+  })
+  .strict();
+
 export type RealFinancialToolName =
   | "get_financial_period"
   | "get_cash_flow"
@@ -82,6 +101,9 @@ export type RealFinancialToolName =
   | "get_largest_expenses"
   | "get_spending_by_institution"
   | "get_monthly_financial_trend"
+  | "get_recent_transactions"
+  | "search_transactions"
+  | "get_daily_spending_summary"
   | "get_data_capabilities";
 
 const nullableDateProperties = {
@@ -310,6 +332,75 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "get_recent_transactions",
+      description:
+        "Retorna as movimentações mais recentes usando a data disponível no dataset. Use para perguntas como último gasto, última compra, últimas movimentações ou o que comprei recentemente. Para gasto/compra use kind=spending; para renda identificada use kind=income.",
+      parameters: {
+        type: "object",
+        properties: {
+          ...nullableDateProperties,
+          limit: {
+            type: ["number", "null"],
+            description: "Quantidade de movimentações, de 1 a 20. Padrão 5.",
+          },
+          kind: {
+            anyOf: [
+              { type: "string", enum: ["all", "spending", "income"] },
+              { type: "null" },
+            ],
+            description: "Filtra todas as movimentações, somente spending econômico ou somente renda identificada.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_transactions",
+      description:
+        "Busca movimentações por texto em descrição, instituição ou nome de conta. Use quando o usuário citar algo como Uber, iFood, mercado, um banco ou perguntar por 'aquele gasto'. A busca é limitada e não envia o extrato inteiro ao LLM.",
+      parameters: {
+        type: "object",
+        properties: {
+          ...nullableDateProperties,
+          query: {
+            type: "string",
+            description: "Texto literal principal a procurar, por exemplo Uber, iFood ou Nubank.",
+          },
+          limit: {
+            type: ["number", "null"],
+            description: "Quantidade máxima de resultados, de 1 a 20. Padrão 10.",
+          },
+          kind: {
+            anyOf: [
+              { type: "string", enum: ["all", "spending", "income"] },
+              { type: "null" },
+            ],
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_daily_spending_summary",
+      description:
+        "Calcula no backend gasto total, média por dia civil, média por dia com gasto e o dia de maior gasto. Também retorna no máximo 31 pontos diários recentes. Use para perguntas como quanto costumo gastar por dia, média diária ou padrão diário de spending.",
+      parameters: {
+        type: "object",
+        properties: nullableDateProperties,
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_data_capabilities",
       description:
         "Informa campos, análises, limitações e qualidade do dataset Pluggy atual. Use apenas para dimensões ainda não integradas, como saldo bancário atual, investimentos, empréstimos ou projeção de fatura. NÃO use para spending, renda, poupança/savings, categorias, instituições ou tendência mensal, pois existem tools específicas. Não aceita argumentos.",
@@ -395,6 +486,21 @@ export class RealFinancialToolExecutor {
       case "get_monthly_financial_trend": {
         const args = monthlyTrendSchema.parse(raw);
         return this.data.getMonthlySeries(args);
+      }
+
+      case "get_recent_transactions": {
+        const args = recentTransactionsSchema.parse(raw);
+        return this.data.getRecentTransactions(args);
+      }
+
+      case "search_transactions": {
+        const args = searchTransactionsSchema.parse(raw);
+        return this.data.searchTransactions(args);
+      }
+
+      case "get_daily_spending_summary": {
+        const args = dateRangeSchema.parse(raw);
+        return this.data.getDailySpendingSummary(args);
       }
 
       case "get_data_capabilities":

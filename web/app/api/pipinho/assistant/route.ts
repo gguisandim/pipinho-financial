@@ -7,7 +7,24 @@ import type { AssistantResponse } from "@/lib/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const bodySchema = z.object({ question: z.string().trim().min(3).max(500) }).strict();
+const bodySchema = z
+  .object({
+    question: z.string().trim().min(1).max(500),
+    conversationId: z.string().trim().min(8).max(100).optional(),
+    history: z
+      .array(
+        z
+          .object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string().trim().min(1).max(1000),
+          })
+          .strict(),
+      )
+      .max(10)
+      .optional()
+      .default([]),
+  })
+  .strict();
 
 export async function POST(request: Request) {
   const auth = await requireApiUser();

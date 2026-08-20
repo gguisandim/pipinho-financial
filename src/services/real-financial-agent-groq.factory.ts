@@ -13,7 +13,12 @@ import { RealFinancialDataService } from "./real-financial-data.service.js";
 
 function deterministicToolPlan(question: string) {
   const decision = routeFinancialTools(question);
-  if (decision.intent === "general" || decision.toolNames.length !== 1) {
+  if (
+    decision.intent === "general" ||
+    decision.intent === "conversation" ||
+    decision.toolNames.length !== 1 ||
+    decision.toolNames[0] === "search_transactions"
+  ) {
     return null;
   }
 

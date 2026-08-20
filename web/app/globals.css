@@ -413,3 +413,23 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: 
   .architecture-note { padding: 20px; }
   .trend-chart-scroll-content { min-width: 500px; }
 }
+
+/* Cycle 11 — assistant conversation controls */
+.assistant-header-copy { flex: 1; min-width: 0; }
+.assistant-new-chat {
+  align-self: flex-start;
+  border: 1px solid var(--border, rgba(23, 27, 31, .14));
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 9px 13px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.assistant-new-chat:hover { background: rgba(23, 27, 31, .05); }
+@media (max-width: 720px) {
+  .assistant-header { align-items: flex-start; flex-wrap: wrap; }
+  .assistant-header-copy { flex-basis: calc(100% - 92px); }
+  .assistant-new-chat { margin-left: 92px; }
+}

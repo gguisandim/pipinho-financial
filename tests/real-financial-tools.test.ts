@@ -53,3 +53,24 @@ describe("RealFinancialToolExecutor", () => {
     expect(result.institutions[0]?.institution).toBe("Nubank");
   });
 });
+
+describe("RealFinancialToolExecutor - Cycle 11 tools", () => {
+  it("executa consulta de transações recentes", async () => {
+    const executor = new RealFinancialToolExecutor(
+      new RealFinancialDataService(repository),
+    );
+    const result = (await executor.execute(
+      "get_recent_transactions",
+      '{"kind":"spending","limit":1}',
+    )) as { status: string; transactions: Array<{ description: string }> };
+    expect(result.status).toBe("ok");
+    expect(result.transactions[0]?.description).toBe("Compra");
+  });
+
+  it("exige query na busca textual", async () => {
+    const executor = new RealFinancialToolExecutor(
+      new RealFinancialDataService(repository),
+    );
+    await expect(executor.execute("search_transactions", "{}")).rejects.toThrow();
+  });
+});

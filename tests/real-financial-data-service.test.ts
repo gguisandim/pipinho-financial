@@ -190,3 +190,35 @@ describe("RealFinancialDataService", () => {
     expect(result.transactions[0]?.description).toBe("Mercado");
   });
 });
+
+describe("RealFinancialDataService - Cycle 11 conversational tools", () => {
+  it("retorna o gasto mais recente sem incluir pagamento de fatura", async () => {
+    const result = await service().getRecentTransactions({ kind: "spending", limit: 1 });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.ambiguousLatestDate).toBe(true);
+    expect(result.latestDateCandidateCount).toBe(2);
+    expect(result.transactions.map((item) => item.description).sort()).toEqual([
+      "Mercado",
+      "Uber",
+    ]);
+    expect(result.transactions.map((item) => item.description)).not.toContain("Pagamento de fatura");
+  });
+
+  it("busca movimentações por descrição de forma tolerante a caixa", async () => {
+    const result = await service().searchTransactions({ query: "uber", kind: "spending" });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.transactions[0]?.description).toBe("Uber");
+    expect(result.transactions[0]?.institution).toBe("PicPay");
+  });
+
+  it("calcula média diária no backend", async () => {
+    const result = await service().getDailySpendingSummary();
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.totalSpending).toBe(150);
+    expect(result.averagePerCalendarDay).toBe(150);
+    expect(result.averagePerSpendingDay).toBe(150);
+  });
+});

@@ -145,6 +145,11 @@ export interface AssistantResponse {
   answer: string;
   referenceDate: string;
   executionMode: string;
+  conversation?: {
+    id: string | null;
+    historyMessagesUsed: number;
+    contextualRouting: boolean;
+  };
   grounding: {
     causal: boolean;
     quality: boolean;

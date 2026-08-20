@@ -437,6 +437,11 @@ export class RealFinancialDataService {
       status: "ok" as const,
       source: snapshot.source,
       institution: options.institution ?? null,
+      requestedPeriod: {
+        startDate: options.startDate,
+        endDate: options.endDate,
+      },
+      observedPeriod: getAvailablePeriod(transactions),
       institutions,
       evidenceScope: {
         institutionComesFromPluggyItemMapping: true,
@@ -508,6 +513,224 @@ export class RealFinancialDataService {
     };
   }
 
+  async getRecentTransactions(
+    options: DateRange & {
+      limit?: number;
+      kind?: "all" | "spending" | "income";
+    } = {},
+  ) {
+    const { snapshot, transactions } = await this.selected(options);
+    const kind = options.kind ?? "all";
+    const limit = Math.min(Math.max(options.limit ?? 5, 1), 20);
+
+    const filtered = transactions
+      .filter((transaction) => {
+        if (kind === "spending") {
+          return classifyFinancialMovement(transaction) === "spending";
+        }
+        if (kind === "income") {
+          return transaction.type === "credit" && transaction.category === "income";
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const byDate = b.date.localeCompare(a.date);
+        return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
+      });
+
+    const latestDate = filtered[0]?.date ?? null;
+    const latestDateCandidates = latestDate
+      ? filtered.filter((transaction) => transaction.date === latestDate)
+      : [];
+    const ambiguousLatestDate = limit === 1 && latestDateCandidates.length > 1;
+    const selected = ambiguousLatestDate
+      ? latestDateCandidates.slice(0, 5)
+      : filtered.slice(0, limit);
+    if (selected.length === 0) {
+      return {
+        status: "no_data" as const,
+        source: snapshot.source,
+        requestedPeriod: options,
+        kind,
+        availablePeriod: getAvailablePeriod(snapshot.transactions),
+        message: "Não foram encontradas movimentações compatíveis com a consulta.",
+      };
+    }
+
+    return {
+      status: "ok" as const,
+      source: snapshot.source,
+      kind,
+      requestedLimit: limit,
+      returnedTransactionCount: selected.length,
+      ambiguousLatestDate,
+      latestDate,
+      latestDateCandidateCount: latestDateCandidates.length,
+      transactions: selected.map((transaction) => ({
+        date: transaction.date,
+        description: transaction.description,
+        amount: transaction.amount,
+        type: transaction.type,
+        category: transaction.category,
+        institution: transaction.metadata?.institution ?? null,
+        accountName: transaction.metadata?.accountName ?? null,
+        movement: classifyFinancialMovement(transaction),
+      })),
+      evidenceScope: {
+        orderingUsesAvailableTransactionDate: true,
+        intradayOrderingUnavailable: true,
+        latestDateTieReturnsCandidates: true,
+        rawDatasetSentToLlm: false,
+      },
+    };
+  }
+
+  async searchTransactions(
+    options: DateRange & {
+      query: string;
+      limit?: number;
+      kind?: "all" | "spending" | "income";
+    },
+  ) {
+    const { snapshot, transactions } = await this.selected(options);
+    const query = options.query
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    const terms = query.split(/\s+/).filter(Boolean);
+    const kind = options.kind ?? "all";
+    const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
+
+    const matches = transactions
+      .filter((transaction) => {
+        if (kind === "spending" && classifyFinancialMovement(transaction) !== "spending") {
+          return false;
+        }
+        if (kind === "income" && !(transaction.type === "credit" && transaction.category === "income")) {
+          return false;
+        }
+
+        const haystack = [
+          transaction.description,
+          transaction.metadata?.institution ?? "",
+          transaction.metadata?.accountName ?? "",
+        ]
+          .join(" ")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    if (matches.length === 0) {
+      return {
+        status: "no_data" as const,
+        source: snapshot.source,
+        query: options.query,
+        kind,
+        requestedPeriod: options,
+        availablePeriod: getAvailablePeriod(snapshot.transactions),
+        message: `Não encontrei movimentações correspondentes a "${options.query}".`,
+      };
+    }
+
+    const selected = matches.slice(0, limit);
+    return {
+      status: "ok" as const,
+      source: snapshot.source,
+      query: options.query,
+      kind,
+      totalMatchCount: matches.length,
+      returnedTransactionCount: selected.length,
+      sampleTruncated: selected.length < matches.length,
+      transactions: selected.map((transaction) => ({
+        date: transaction.date,
+        description: transaction.description,
+        amount: transaction.amount,
+        type: transaction.type,
+        category: transaction.category,
+        institution: transaction.metadata?.institution ?? null,
+        accountName: transaction.metadata?.accountName ?? null,
+        movement: classifyFinancialMovement(transaction),
+      })),
+      evidenceScope: {
+        searchFields: ["description", "institution", "account_name"],
+        sampleLimited: true,
+        rawDatasetSentToLlm: false,
+      },
+    };
+  }
+
+  async getDailySpendingSummary(range: DateRange = {}) {
+    const { snapshot, transactions } = await this.selected(range);
+    const spending = transactions.filter(
+      (transaction) => classifyFinancialMovement(transaction) === "spending",
+    );
+
+    if (spending.length === 0) {
+      return {
+        status: "no_data" as const,
+        source: snapshot.source,
+        requestedPeriod: range,
+        availablePeriod: getAvailablePeriod(snapshot.transactions),
+        message: "Não existem gastos no período solicitado.",
+      };
+    }
+
+    const byDay = new Map<string, { amount: number; count: number }>();
+    for (const transaction of spending) {
+      const current = byDay.get(transaction.date) ?? { amount: 0, count: 0 };
+      current.amount += transaction.amount;
+      current.count += 1;
+      byDay.set(transaction.date, current);
+    }
+
+    const days = [...byDay.entries()]
+      .map(([date, value]) => ({
+        date,
+        amount: round2(value.amount),
+        transactionCount: value.count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const transactionDates = transactions.map((transaction) => transaction.date).sort();
+    const firstDate = range.startDate ?? transactionDates[0]!;
+    const lastDate = range.endDate ?? transactionDates.at(-1)!;
+    const calendarDays =
+      Math.floor(
+        (new Date(`${lastDate}T00:00:00.000Z`).getTime() -
+          new Date(`${firstDate}T00:00:00.000Z`).getTime()) /
+          86_400_000,
+      ) + 1;
+    const totalSpending = round2(
+      spending.reduce((sum, transaction) => sum + transaction.amount, 0),
+    );
+    const largestDay = [...days].sort((a, b) => b.amount - a.amount)[0]!;
+
+    return {
+      status: "ok" as const,
+      source: snapshot.source,
+      period: { start: firstDate, end: lastDate },
+      totalSpending,
+      calendarDays,
+      spendingDays: days.length,
+      averagePerCalendarDay: round2(totalSpending / calendarDays),
+      averagePerSpendingDay: round2(totalSpending / days.length),
+      largestSpendingDay: largestDay,
+      dailyPointCount: days.length,
+      recentDailyPoints: days.slice(-31),
+      dailyPointsTruncated: days.length > 31,
+      evidenceScope: {
+        averagesCalculatedByBackend: true,
+        detailedDailyPointsAreBounded: true,
+        spendingAvoidsCreditCardDoubleCount: true,
+        rawDatasetSentToLlm: false,
+      },
+    };
+  }
+
   async getDataCapabilities() {
     const snapshot = await this.snapshot();
     const period = getAvailablePeriod(snapshot.transactions);
@@ -542,6 +765,9 @@ export class RealFinancialDataService {
         "largest_expenses",
         "spending_by_institution",
         "monthly_financial_trend",
+        "recent_transactions",
+        "transaction_search",
+        "daily_spending_summary",
         "financial_charges_category",
         "savings_when_income_quality_allows",
       ],

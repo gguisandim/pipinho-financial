@@ -10,6 +10,7 @@ REGRAS OBRIGATÓRIAS:
 - Se savings.available=false, diga que poupança/taxa está indisponível e use o motivo fornecido.
 - Se status=no_data, explique que não há dados no período pedido e, se availablePeriod existir, informe apenas esse intervalo como contexto.
 - Não acrescente tabela ou breakdown de dimensão que não esteja explicitamente no JSON.
+- Se a operação retornar movimentações recentes e indicar intradayOrderingUnavailable=true, descreva como "mais recente pela data disponível" quando houver ambiguidade; não invente horário ou ordem dentro do mesmo dia.
 - Ao traduzir categorias canônicas, use somente: housing=moradia; groceries=supermercado/mercearia; food_delivery=entrega de comida; transport=transporte; utilities=contas/serviços; subscriptions=assinaturas; health=saúde; restaurants=restaurantes; education=educação; fitness=academia/fitness; shopping=compras; financial_charges=encargos financeiros; other=outros. Não invente outro rótulo.
 - Responda em português do Brasil, de forma objetiva.`;
 

@@ -15,6 +15,7 @@ function fakeAgent() {
         referenceDate: "2026-08-19",
         executionMode: "fast_path" as const,
         answer: "Você gastou R$ 100,00 no período solicitado.",
+        conversation: { id: null, historyMessagesUsed: 0, contextualRouting: false },
         termination: "model_answer" as const,
         iterations: 2,
         toolCalls: [
@@ -115,5 +116,45 @@ describe("assistantRoutes", () => {
       payload: { question: "Analise meus gastos", debug: true },
     });
     expect(response.statusCode).toBe(400);
+  });
+});
+
+
+describe("assistantRoutes - Cycle 11 conversation context", () => {
+  it("aceita conversationId e histórico curto", async () => {
+    const app = Fastify({ logger: false });
+    const received: unknown[] = [];
+    const agent = {
+      async answer(question: string, context?: unknown) {
+        received.push({ question, context });
+        return {
+          ...(await fakeAgent().answer(question)),
+          conversation: { id: "conv-test-123", historyMessagesUsed: 2, contextualRouting: true },
+        };
+      },
+    };
+    await app.register(assistantRoutes, {
+      requireAuth: false,
+      agentService: agent as never,
+    });
+    await app.ready();
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/assistant",
+      payload: {
+        question: "E mês passado?",
+        conversationId: "conv-test-123",
+        history: [
+          { role: "user", content: "Quanto gastei este mês?" },
+          { role: "assistant", content: "Você gastou R$ 100,00." },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(response.json().conversation.contextualRouting).toBe(true);
   });
 });

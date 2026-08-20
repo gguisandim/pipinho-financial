@@ -267,8 +267,17 @@ export function evaluateFinancialEvidenceGrounding(
   const categoryEvidence = hasAnyTool(names, [
     "get_spending_by_category",
     "get_category_transactions",
+    "get_largest_expenses",
+    "get_recent_transactions",
+    "search_transactions",
   ]);
-  const institutionEvidence = names.has("get_spending_by_institution");
+  const institutionEvidence = hasAnyTool(names, [
+    "get_spending_by_institution",
+    "get_category_transactions",
+    "get_largest_expenses",
+    "get_recent_transactions",
+    "search_transactions",
+  ]);
   const monthlyEvidence = names.has("get_monthly_financial_trend");
 
   for (const line of answer.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
@@ -296,7 +305,7 @@ export function evaluateFinancialEvidenceGrounding(
         code: "unsupported_institution_breakdown",
         fragment: line,
         detail:
-          "A resposta apresentou valor por instituição sem executar get_spending_by_institution.",
+          "A resposta apresentou valor por instituição sem uma tool que forneça evidência de instituição nesta execução.",
       });
     }
 
@@ -368,14 +377,26 @@ export function sanitizeFinancialEvidenceGrounding(
   let lines = answer.split(/\r?\n/);
 
   if (
-    !hasAnyTool(names, ["get_spending_by_category", "get_category_transactions"]) &&
+    !hasAnyTool(names, [
+      "get_spending_by_category",
+      "get_category_transactions",
+      "get_largest_expenses",
+      "get_recent_transactions",
+      "search_transactions",
+    ]) &&
     violations.some((violation) => violation.code === "unsupported_category_breakdown")
   ) {
     lines = removeUnsupportedSection(lines, (heading) => /categor(?:ia|ias)/i.test(heading));
   }
 
   if (
-    !names.has("get_spending_by_institution") &&
+    !hasAnyTool(names, [
+      "get_spending_by_institution",
+      "get_category_transactions",
+      "get_largest_expenses",
+      "get_recent_transactions",
+      "search_transactions",
+    ]) &&
     violations.some((violation) => violation.code === "unsupported_institution_breakdown")
   ) {
     lines = removeUnsupportedSection(lines, (heading) => /institui[cç][aã]o|banco/i.test(heading));

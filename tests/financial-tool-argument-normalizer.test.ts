@@ -97,3 +97,65 @@ describe("normalizeFinancialToolArguments", () => {
   });
 
 });
+
+describe("normalizeFinancialToolArguments - linguagem temporal natural", () => {
+  it("resolve ontem de forma determinística", () => {
+    const raw = normalizeFinancialToolArguments({
+      question: "Quanto eu gastei ontem?",
+      name: "get_spending_summary",
+      rawArguments: "{}",
+      referenceDate,
+    });
+    expect(JSON.parse(raw)).toEqual({
+      startDate: "2026-08-17",
+      endDate: "2026-08-17",
+    });
+  });
+
+  it("resolve este mês até a data de referência", () => {
+    const raw = normalizeFinancialToolArguments({
+      question: "Quanto eu gastei este mês?",
+      name: "get_spending_summary",
+      rawArguments: "{}",
+      referenceDate,
+    });
+    expect(JSON.parse(raw)).toEqual({
+      startDate: "2026-08-01",
+      endDate: "2026-08-18",
+    });
+  });
+
+  it("resolve mês passado como mês civil completo", () => {
+    const raw = normalizeFinancialToolArguments({
+      question: "E mês passado?",
+      name: "get_spending_summary",
+      rawArguments: "{}",
+      referenceDate,
+    });
+    expect(JSON.parse(raw)).toEqual({
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+    });
+  });
+
+  it("infere último gasto como uma única transação de spending", () => {
+    const raw = normalizeFinancialToolArguments({
+      question: "Qual foi meu último gasto?",
+      name: "get_recent_transactions",
+      rawArguments: "{}",
+      referenceDate,
+    });
+    expect(JSON.parse(raw)).toEqual({ kind: "spending", limit: 1 });
+  });
+});
+
+
+it("não limita a baseline diária a ontem em pergunta comparativa", () => {
+  const raw = normalizeFinancialToolArguments({
+    question: "Gastei muito ontem?",
+    name: "get_daily_spending_summary",
+    rawArguments: "{}",
+    referenceDate,
+  });
+  expect(JSON.parse(raw)).toEqual({});
+});
