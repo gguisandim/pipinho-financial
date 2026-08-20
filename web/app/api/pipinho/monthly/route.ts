@@ -1,30 +1,20 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
 import { financialApi } from "@/lib/backend";
-import type { DashboardOverview } from "@/lib/types";
+import type { MonthlySeriesResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-function safeDate(value: string | null): string | null {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-}
 
 export async function GET(request: Request) {
   const auth = await requireApiUser();
   if (!auth.ok) return NextResponse.json({ error: "unauthorized", message: auth.message }, { status: auth.status });
 
   const url = new URL(request.url);
-  const params = new URLSearchParams();
-  const startDate = safeDate(url.searchParams.get("startDate"));
-  const endDate = safeDate(url.searchParams.get("endDate"));
   const rawMonths = Number(url.searchParams.get("months") ?? "12");
   const months = Number.isFinite(rawMonths) ? Math.min(Math.max(Math.round(rawMonths), 1), 24) : 12;
-  if (startDate) params.set("startDate", startDate);
-  if (endDate) params.set("endDate", endDate);
-  params.set("months", String(months));
 
   try {
-    const data = await financialApi<DashboardOverview>(`/api/v1/dashboard/overview?${params.toString()}`);
+    const data = await financialApi<MonthlySeriesResponse>(`/api/v1/dashboard/series/monthly?months=${months}`);
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json({ error: "backend_unavailable", message: error instanceof Error ? error.message : "Backend indisponível." }, { status: 503 });

@@ -171,3 +171,12 @@ export interface LargestExpensesResponse {
     paymentRail: "credit_card" | "bank";
   }>;
 }
+
+export interface MonthlySeriesResponse {
+  status: "ok" | "no_data";
+  source?: string;
+  period?: { start: string; end: string };
+  requestedPeriod?: { startDate?: string; endDate?: string };
+  availablePeriod?: { start: string; end: string } | null;
+  points: MonthlyPoint[];
+}

@@ -326,3 +326,90 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: 
   .architecture-note { flex-direction: column; }
   .login-box h2 { font-size: 31px; }
 }
+
+/* Cycle 10 — monthly dashboard controls and mobile hardening */
+.page-header-actions { display: flex; align-items: flex-end; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.period-filter { display: grid; gap: 6px; min-width: 230px; }
+.period-filter > span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; padding-left: 3px; }
+.period-filter select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 0 36px 0 12px; outline: 0; cursor: pointer; font-size: 11px; font-weight: 650; }
+.period-filter select:focus { border-color: rgba(101,117,141,.5); box-shadow: 0 0 0 3px rgba(135,153,177,.12); }
+.period-filter select:disabled { opacity: .65; cursor: wait; }
+.page-refreshing { position: relative; }
+.page-refreshing::before { content: ""; position: fixed; top: 0; left: 248px; right: 0; height: 2px; background: var(--blue-deep); opacity: .65; animation: period-loading 1s ease-in-out infinite alternate; z-index: 50; }
+@keyframes period-loading { from { transform: scaleX(.2); transform-origin: left; } to { transform: scaleX(1); transform-origin: left; } }
+.metric-comparison { color: var(--blue-deep) !important; font-weight: 650; }
+.inline-warning { border: 1px solid rgba(170,122,77,.2); background: rgba(170,122,77,.08); color: #765a3e; border-radius: 12px; padding: 10px 12px; font-size: 10px; line-height: 1.5; }
+.period-summary-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; padding: 0 2px; }
+.period-summary-line i { color: var(--blue-deep); font-style: normal; }
+.period-summary-line strong { margin-left: auto; color: var(--ink); font-size: 10px; }
+.no-data-panel { min-height: 48vh; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.expense-empty { padding: 18px 10px 8px; margin: 0; }
+.trend-chart-scroll { overflow: hidden; }
+.trend-chart-scroll-content { min-width: 0; }
+
+@media (max-width: 820px) {
+  .page-refreshing::before { left: 0; }
+  .page-header-actions { width: 100%; justify-content: stretch; align-items: stretch; }
+  .period-filter { min-width: 0; flex: 1 1 220px; }
+  .period-chip { flex: 0 1 auto; align-self: end; }
+  .period-summary-line { flex-wrap: wrap; }
+  .period-summary-line strong { width: 100%; margin-left: 0; }
+  .hero-card { min-height: 280px; }
+  .panel-heading { gap: 10px; }
+  .trend-chart-scroll { overflow-x: auto; overscroll-behavior-inline: contain; padding-bottom: 3px; }
+  .trend-chart-scroll-content { min-width: 600px; }
+  .chart-legend { flex-wrap: wrap; }
+}
+
+@media (max-width: 640px) {
+  .main-content { padding: 72px 12px 28px; }
+  .page-stack { gap: 14px; }
+  .page-header { gap: 16px; }
+  .page-header h1, .assistant-header h1 { font-size: 29px; line-height: 1.05; }
+  .page-header p, .assistant-header p { font-size: 12px; }
+  .page-header-actions { display: grid; grid-template-columns: 1fr; }
+  .period-filter { width: 100%; }
+  .period-filter select { min-height: 48px; font-size: 12px; }
+  .period-chip { width: 100%; text-align: center; white-space: normal; line-height: 1.45; }
+  .hero-card { padding: 22px 18px; border-radius: 22px; }
+  .hero-copy h2 { font-size: 31px; line-height: 1; }
+  .hero-copy > p { font-size: 12px; }
+  .hero-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .primary-button, .secondary-button { width: 100%; min-height: 46px; }
+  .metric-card { min-height: 132px; padding: 16px; }
+  .metric-card > strong { font-size: 27px; }
+  .dashboard-grid, .ai-grid { gap: 12px; }
+  .panel { border-radius: 18px; padding: 16px; }
+  .panel-heading { align-items: flex-start; }
+  .panel-heading h2 { font-size: 18px; }
+  .small-pill { font-size: 9px; padding: 7px 9px; }
+  .category-row { grid-template-columns: 1fr 42px; gap: 8px; }
+  .category-copy { grid-column: 1 / -1; }
+  .category-track { grid-column: 1; }
+  .category-row > small { grid-column: 2; text-align: right; }
+  .institution-row { align-items: flex-start; }
+  .institution-row > p { max-width: 42%; }
+  .trend-chart-scroll-content { min-width: 540px; }
+  .expense-table { overflow: visible; }
+  .expense-table-head { display: none; }
+  .expense-table-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; padding: 15px 2px; align-items: start; }
+  .expense-table-row > span, .expense-table-row > strong { display: grid; gap: 3px; min-width: 0; white-space: normal; text-align: left !important; }
+  .expense-table-row > span::before, .expense-table-row > strong::before { content: attr(data-label); color: var(--muted); font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+  .expense-table-row .expense-description { grid-column: 1 / -1; font-size: 12px; }
+  .expense-table-row > :nth-child(2), .expense-table-row > :nth-child(3) { grid-column: 1; }
+  .expense-table-row > :nth-child(4), .expense-table-row > :nth-child(5) { grid-column: 2; }
+  .expense-table-row > strong:last-child { font-size: 12px; }
+  .no-data-panel { min-height: 42vh; padding: 24px 18px; }
+}
+
+@media (max-width: 420px) {
+  .main-content { padding-inline: 10px; }
+  .mobile-menu-button { top: 10px; left: 10px; }
+  .page-header h1, .assistant-header h1 { font-size: 27px; }
+  .hero-copy h2 { font-size: 28px; }
+  .metric-label-row { font-size: 10px; }
+  .metric-card > strong { font-size: 25px; }
+  .spending-summary strong { font-size: 20px; }
+  .architecture-note { padding: 20px; }
+  .trend-chart-scroll-content { min-width: 500px; }
+}

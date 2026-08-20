@@ -136,3 +136,13 @@ O endpoint atual recebe apenas:
 ```
 
 Logo, cada envio é tratado como uma pergunta independente. A interface mantém o histórico visual apenas durante a sessão da página, mas o backend ainda não possui `conversationId` nem memória de turnos anteriores.
+
+## Ciclo 10 — filtros mensais
+
+A visão geral e a página de gastos usam o mesmo filtro de período. O frontend converte o mês selecionado em `startDate`/`endDate` e repassa o intervalo pelo BFF para a Dashboard API.
+
+- O mês atual é a seleção inicial.
+- É possível consultar até 24 meses anteriores ou todo o período disponível.
+- Os cards principais do dashboard comparam o mês selecionado ao mês anterior quando houver dados.
+- O gráfico de evolução mantém até 12 meses de contexto, mesmo quando os cards estão filtrados para um único mês.
+- Insights e maiores despesas respeitam o mesmo período selecionado.
