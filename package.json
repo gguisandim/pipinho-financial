@@ -33,9 +33,14 @@
     "pretypecheck": "npm run clean:stale",
     "prebuild": "npm run clean:stale && npm run clean:dist",
     "verify:release": "node scripts/verify-release.mjs",
-    "clean:dist": "node scripts/clean-dist.mjs"
+    "clean:dist": "node scripts/clean-dist.mjs",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:typecheck": "npm --prefix web run typecheck"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.3",
     "dotenv": "17.4.2",
     "fastify": "5.12.0",
     "groq-sdk": "1.5.0",

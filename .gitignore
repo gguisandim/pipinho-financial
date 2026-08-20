@@ -13,3 +13,9 @@ reports/*.md
 
 # Production release artifact
 release/
+# Next.js frontend
+.next/
+.vercel/
+.env.local
+.env.*.local
+

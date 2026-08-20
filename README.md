@@ -131,3 +131,18 @@ O script `scripts/prune-release-only.sh` documenta em Bash os diretórios e arqu
 ## Histórico do laboratório
 
 A documentação dos ciclos anteriores foi preservada em `docs/LAB_HISTORY.md`, mas não faz parte do artefato de produção.
+
+## Frontend V1 (`web/`)
+
+O repositório agora inclui um frontend Next.js separado em `web/`, com dashboard, gastos, assistente e autenticação Supabase preparada para Vercel.
+
+A separação é intencional: o pacote de release da API continua por whitelist e não leva o frontend junto.
+
+```bash
+cd web
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Detalhes de autenticação e deploy: [`web/README.md`](web/README.md).
