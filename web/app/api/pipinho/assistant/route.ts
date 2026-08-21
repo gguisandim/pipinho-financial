@@ -16,6 +16,8 @@ import {
   type ChatSessionRecord,
 } from "@/lib/chat-memory";
 import { createClient } from "@/lib/supabase/server";
+import { ensureGoogleCalendarFresh, getCalendarConnectionStatus } from "@/lib/google-calendar";
+import { buildRoutineContext } from "@/lib/routine-context";
 import type { AssistantResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -111,6 +113,21 @@ export async function POST(request: Request) {
   }
 
   try {
+    let routineContext;
+    try {
+      let connection = await getCalendarConnectionStatus(auth.userId);
+      if (connection.connected) {
+        try {
+          connection = await ensureGoogleCalendarFresh(auth.userId, connection);
+        } catch {
+          // Falha de refresh não derruba o agente: usa o último snapshot válido.
+          connection = await getCalendarConnectionStatus(auth.userId).catch(() => connection);
+        }
+      }
+      routineContext = await buildRoutineContext(auth.userId, connection);
+    } catch {
+      routineContext = { status: "unavailable" as const, generatedAt: new Date().toISOString(), timezone: "UTC", lastSyncedAt: null, events: [] };
+    }
     const data = await financialApi<AssistantResponse>("/api/v1/assistant", {
       method: "POST",
       body: JSON.stringify({
@@ -118,6 +135,7 @@ export async function POST(request: Request) {
         conversationId,
         history,
         ...(memorySummary ? { memorySummary } : {}),
+        routineContext,
       }),
     });
 

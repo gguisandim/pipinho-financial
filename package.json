@@ -42,7 +42,11 @@
     "qa:conversation:benchmark": "vitest run tests/conversation-benchmark.test.ts",
     "qa:conversation:benchmark:real": "tsx src/scripts/audit-conversation-benchmark.ts",
     "qa:cycle11": "npm run typecheck && npm run qa:conversation && npm run web:typecheck && npm run web:build",
-    "qa:cycle11:full": "npm run qa:cycle11 && npm run qa:conversation:real && npm run qa:conversation:benchmark:real"
+    "qa:cycle11:full": "npm run qa:cycle11 && npm run qa:conversation:real && npm run qa:conversation:benchmark:real",
+    "qa:routine": "vitest run tests/routine-tools.test.ts tests/routine-routing.test.ts tests/financial-tool-router.test.ts tests/financial-tool-argument-normalizer.test.ts tests/financial-tool-guard.test.ts tests/assistant-routes.test.ts",
+    "qa:cycle12": "npm run typecheck && npm run qa:conversation && npm run qa:routine && npm run web:typecheck && npm run web:build",
+    "qa:routine:real": "tsx src/scripts/audit-routine.ts",
+    "qa:cycle12:full": "npm run qa:cycle12 && npm run qa:conversation:benchmark:real && npm run qa:routine:real"
   },
   "dependencies": {
     "dotenv": "17.4.2",

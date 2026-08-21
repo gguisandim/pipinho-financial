@@ -4,12 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ChatIcon, CloseIcon, HomeIcon, LinkIcon, LogOutIcon, MenuIcon, WalletIcon } from "./icons";
+import { CalendarIcon, ChatIcon, CloseIcon, HomeIcon, LinkIcon, LogOutIcon, MenuIcon, WalletIcon } from "./icons";
 
 const nav = [
   { href: "/dashboard", label: "Visão geral", icon: HomeIcon },
   { href: "/gastos", label: "Gastos", icon: WalletIcon },
   { href: "/assistente", label: "Assistente", icon: ChatIcon },
+  { href: "/rotina", label: "Rotina", icon: CalendarIcon },
   { href: "/conexoes", label: "Conexões", icon: LinkIcon },
 ];
 

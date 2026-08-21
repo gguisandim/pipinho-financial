@@ -19,6 +19,9 @@ export interface FinancialToolRoutingDecision {
     | "cash_flow"
     | "spending"
     | "capabilities"
+    | "routine_schedule"
+    | "routine_next"
+    | "routine_finance"
     | "general";
   toolNames: string[];
 }
@@ -80,6 +83,21 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
       intent: "daily_comparison",
       toolNames: ["get_spending_summary", "get_daily_spending_summary"],
     };
+  }
+
+  const routineTerms = /\b(agenda|calendario|compromisso|compromissos|evento|eventos|reuniao|reunioes|aula|aulas|consulta|consultas|onde vou|pra onde vou|que horas|tenho algo|tenho alguma coisa|o que (?:eu )?tenho)\b/;
+  const routineFinancialTerms = /\b(quanto gastei|quanto eu gastei|gastos?|despesas?|custou|quanto foi)\b/;
+
+  if (routineFinancialTerms.test(q) && (routineTerms.test(q) || /\b(no dia d[oa]|durante|nesse evento|nesse compromisso|na reuniao|na aula)\b/.test(q))) {
+    return { intent: "routine_finance", toolNames: ["get_event_day_spending"] };
+  }
+
+  if (/\b(proximo compromisso|proxima reuniao|proximo evento|o que vem agora|o que vem depois|pra onde vou agora|pra onde vou depois|onde vou agora|onde vou depois)\b/.test(q)) {
+    return { intent: "routine_next", toolNames: ["get_next_commitment"] };
+  }
+
+  if (routineTerms.test(q)) {
+    return { intent: "routine_schedule", toolNames: ["get_routine_schedule"] };
   }
 
   // Domínios explicitamente não integrados precisam vencer expressões genéricas

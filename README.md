@@ -146,3 +146,11 @@ npm run dev
 ```
 
 Detalhes de autenticação e deploy: [`web/README.md`](web/README.md).
+
+## Ciclo 12 — Rotina (`/rotina`)
+
+O frontend também pode conectar um Google Calendar em modo somente leitura. O calendário é sincronizado para um snapshot mínimo no Supabase e passa ao agente apenas por um contexto confiável criado no BFF; o browser não escolhe nem injeta eventos no payload do backend.
+
+A integração permite consultar agenda, próximo compromisso e gastos observados na mesma janela de um evento. Coincidência temporal nunca é tratada como causalidade financeira.
+
+Configuração, migration, OAuth e QA: [`docs/CICLO_12.md`](docs/CICLO_12.md).

@@ -35,6 +35,8 @@ import {
   type ConversationHistoryMessage,
 } from "../agent/conversation-context.js";
 import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
+import { sanitizeRoutineContext, type RoutineContextSnapshot } from "../routine/routine-context.js";
+import { isRoutineToolName, routineToolDefinitions, RoutineToolExecutor } from "../routine/routine-tools.js";
 import {
   FINANCIAL_AGENT_FALLBACK_SYSTEM_PROMPT,
   buildFinancialAgentFallbackPrompt,
@@ -116,6 +118,7 @@ export class AgenticFinancialService {
       history?: ConversationHistoryMessage[];
       conversationId?: string;
       memorySummary?: string;
+      routineContext?: RoutineContextSnapshot;
     } = {},
   ) {
     const maxIterations = this.options.maxIterations ?? env.AGENT_MAX_ITERATIONS;
@@ -128,7 +131,11 @@ export class AgenticFinancialService {
       ? question
       : routingQuestion;
 
-    const allToolDefinitions = this.options.toolDefinitions;
+    const routineContext = sanitizeRoutineContext(context.routineContext);
+    const routineExecutor = new RoutineToolExecutor(routineContext, this.options.toolExecutor, referenceDate);
+    const runtimeToolExecutor: FinancialToolExecutor = (name, rawArguments) =>
+      isRoutineToolName(name) ? routineExecutor.execute(name, rawArguments) : this.options.toolExecutor(name, rawArguments);
+    const allToolDefinitions = [...this.options.toolDefinitions, ...routineToolDefinitions];
     const toolDefinitions = this.options.toolDefinitionsSelector
       ? this.options.toolDefinitionsSelector(routingQuestion, allToolDefinitions)
       : allToolDefinitions;
@@ -200,7 +207,7 @@ export class AgenticFinancialService {
         name: deterministicPlan.name,
         rawArguments: effectiveArguments,
         referenceDate,
-        executor: this.options.toolExecutor,
+        executor: runtimeToolExecutor,
       });
 
       if (execution.status === "executed") {
@@ -390,7 +397,7 @@ export class AgenticFinancialService {
             name: toolCall.function.name,
             rawArguments: effectiveArguments,
             referenceDate,
-            executor: this.options.toolExecutor,
+            executor: runtimeToolExecutor,
           });
           outcome = execution.status;
           result = execution.result;

@@ -17,7 +17,8 @@ function deterministicToolPlan(question: string) {
     decision.intent === "general" ||
     decision.intent === "conversation" ||
     decision.toolNames.length !== 1 ||
-    decision.toolNames[0] === "search_transactions"
+    decision.toolNames[0] === "search_transactions" ||
+    decision.toolNames[0] === "get_event_day_spending"
   ) {
     return null;
   }

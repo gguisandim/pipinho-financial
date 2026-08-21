@@ -1,0 +1,7 @@
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { requireApiUser } from "@/lib/auth";
+import { exchangeGoogleAuthorizationCode, saveGoogleCalendarConnection, syncGoogleCalendar } from "@/lib/google-calendar";
+export const dynamic="force-dynamic";export const maxDuration=60;
+function back(request:Request,key:string,value:string){const u=new URL("/rotina",request.url);u.searchParams.set(key,value);return NextResponse.redirect(u);}
+export async function GET(request:Request){const auth=await requireApiUser();if(!auth.ok)return back(request,"calendarError","unauthorized");const u=new URL(request.url),err=u.searchParams.get("error");if(err)return back(request,"calendarError",err);const code=u.searchParams.get("code"),state=u.searchParams.get("state"),store=await cookies(),expected=store.get("pipinho_google_calendar_state")?.value;if(!code||!state||!expected||state!==expected)return back(request,"calendarError","invalid_oauth_state");try{const token=await exchangeGoogleAuthorizationCode(code);if(!token.access_token||!token.refresh_token)return back(request,"calendarError","missing_refresh_token");await saveGoogleCalendarConnection({userId:auth.userId,refreshToken:token.refresh_token,accessToken:token.access_token,scope:token.scope});await syncGoogleCalendar(auth.userId);const res=back(request,"calendarConnected","1");res.cookies.delete("pipinho_google_calendar_state");return res;}catch(error){return back(request,"calendarError",(error instanceof Error?error.message:"calendar_oauth_failed").slice(0,120));}}

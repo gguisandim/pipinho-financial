@@ -27,6 +27,8 @@ const suggestions = [
   "Quanto tem no roxinho?",
   "Quanto eu costumo gastar por dia?",
   "Quanto foi aquele Uber de ontem?",
+  "O que eu tenho amanhã?",
+  "Qual meu próximo compromisso?",
 ];
 
 function formatSessionDate(value: string): string {
@@ -286,7 +288,7 @@ export function AssistantChat() {
           <div className="assistant-header-copy">
             <span className="eyebrow">ASSISTENTE FINANCEIRO</span>
             <h1>Converse com o Pipinho</h1>
-            <p>O contexto recente agora pode acompanhar você entre dispositivos.</p>
+            <p>O contexto recente e, quando conectado, sua rotina podem acompanhar você entre dispositivos.</p>
           </div>
           <div className="assistant-header-actions">
             <button

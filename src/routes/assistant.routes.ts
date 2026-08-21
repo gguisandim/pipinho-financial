@@ -3,6 +3,7 @@ import { z } from "zod";
 import { registerApiAuthHook, type ApiAuthOptions } from "../http/api-auth.js";
 import { safeErrorForLog } from "../http/safe-error.js";
 import { createGroqRealFinancialAgentService } from "../services/real-financial-agent-groq.factory.js";
+import { routineContextSchema } from "../routine/routine-context.js";
 
 const historyMessageSchema = z
   .object({
@@ -17,6 +18,7 @@ const requestSchema = z
     conversationId: z.string().trim().min(8).max(100).optional(),
     history: z.array(historyMessageSchema).max(10).optional().default([]),
     memorySummary: z.string().trim().min(1).max(1500).optional(),
+    routineContext: routineContextSchema.optional(),
   })
   .strict();
 
@@ -52,6 +54,7 @@ export async function assistantRoutes(
         conversationId: parsed.data.conversationId,
         history: parsed.data.history,
         memorySummary: parsed.data.memorySummary,
+        routineContext: parsed.data.routineContext,
       });
       return {
         status: "ok" as const,

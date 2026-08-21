@@ -112,12 +112,17 @@ function isPolicyGroundedDerivedRange(
   args: Record<string, unknown>,
   referenceDate: string,
 ): boolean {
-  if (name !== "get_daily_spending_summary") return false;
-
   const normalized = question
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+
+  if (name === "get_routine_schedule") {
+    const asksRoutine = /\b(agenda|calendario|compromissos?|eventos?|reunioes?|aulas?)\b/.test(normalized);
+    return asksRoutine && args.startDate === referenceDate && args.endDate === addDays(referenceDate, 7);
+  }
+
+  if (name !== "get_daily_spending_summary") return false;
 
   const asksHabitualDailySpending =
     /\b(costumo|media|padrao|normal|por dia)\b/.test(normalized);

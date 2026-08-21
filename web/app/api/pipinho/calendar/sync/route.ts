@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";import { requireApiUser } from "@/lib/auth";import { syncGoogleCalendar } from "@/lib/google-calendar";
+export const dynamic="force-dynamic";export const maxDuration=60;
+export async function POST(){const auth=await requireApiUser();if(!auth.ok)return NextResponse.json({error:"unauthorized",message:auth.message},{status:auth.status});try{return NextResponse.json(await syncGoogleCalendar(auth.userId));}catch(error){return NextResponse.json({error:"calendar_sync_failed",message:error instanceof Error?error.message:"Falha ao sincronizar calendário."},{status:503});}}

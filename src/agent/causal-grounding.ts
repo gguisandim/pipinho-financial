@@ -2,7 +2,8 @@ import type { AgentToolTrace } from "./financial-agent.types.js";
 
 export type CausalGroundingViolationCode =
   | "unsupported_generalization"
-  | "unsupported_detail";
+  | "unsupported_detail"
+  | "unsupported_event_causality";
 
 export interface CausalGroundingViolation {
   code: CausalGroundingViolationCode;
@@ -19,6 +20,19 @@ const generalizationPatterns = [
   /\b(costuma|costumam|geralmente|normalmente|tipicamente|em geral)\b/i,
   /\b(provavelmente|possivelmente|talvez|pode indicar|poderia indicar)\b/i,
 ];
+
+
+const eventCausalityPatterns = [
+  /\b(por causa|devido a|em razao|causad[oa]s?|gerou|provocou)\b/i,
+  /\b(gast(?:ei|ou|os?)|despes(?:a|as))\b.*\b(na|no|durante a|durante o)\s+(reuniao|evento|compromisso|aula|consulta)\b/i,
+  /\b(gastos?|despesas?)\b.*\b(relacionad[oa]s?|associad[oa]s?)\s+(ao|a)\s+(evento|compromisso|reuniao|aula|consulta)\b/i,
+];
+
+function usedEventDaySpending(tools: AgentToolTrace[]): boolean {
+  return tools.some(
+    (tool) => tool.outcome === "executed" && tool.name === "get_event_day_spending",
+  );
+}
 
 // Detalhes que o modelo costuma inferir a partir de categorias agregadas.
 // Eles só podem aparecer como fatos se também estiverem presentes nos resultados
@@ -57,7 +71,18 @@ export function evaluateCausalGrounding(
   const evidence = evidenceText(tools);
   const violations: CausalGroundingViolation[] = [];
 
+  const eventWindowOnly = usedEventDaySpending(tools);
+
   for (const sentence of splitSentences(answer)) {
+    if (eventWindowOnly && eventCausalityPatterns.some((pattern) => pattern.test(normalize(sentence)))) {
+      violations.push({
+        code: "unsupported_event_causality",
+        sentence,
+        detail:
+          "A tool de rotina comprova apenas coincidência temporal entre o compromisso e a janela de gastos, não causalidade.",
+      });
+    }
+
     for (const pattern of generalizationPatterns) {
       if (pattern.test(sentence)) {
         violations.push({

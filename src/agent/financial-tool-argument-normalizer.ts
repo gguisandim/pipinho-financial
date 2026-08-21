@@ -32,6 +32,7 @@ const DATE_RANGE_TOOLS = new Set([
   "get_recent_transactions",
   "search_transactions",
   "get_daily_spending_summary",
+  "get_routine_schedule",
 ]);
 
 function normalizeText(value: string): string {
@@ -84,7 +85,7 @@ function hasTemporalReference(question: string): boolean {
   return (
     namedMonths(q).length > 0 ||
     explicitYears(q).length > 0 ||
-    /\b(hoje|ontem|anteontem|semana|mes|meses|ano|anos|trimestre|semestre|periodo|desde|ate|entre|ultimo|ultimos|ultima|ultimas)\b/.test(q)
+    /\b(hoje|ontem|anteontem|amanha|depois de amanha|semana|mes|meses|ano|anos|trimestre|semestre|periodo|desde|ate|entre|ultimo|ultimos|ultima|ultimas|proximo|proximos|proxima|proximas|fim de semana|fds)\b/.test(q)
   );
 }
 
@@ -143,6 +144,13 @@ function relativeRange(question: string, referenceDate: string): {
   if (/\b(hoje)\b/.test(q)) {
     return { startDate: referenceDate, endDate: referenceDate };
   }
+
+  if (/\b(depois de amanha)\b/.test(q)) { const day = addDays(referenceDate, 2); return { startDate: day, endDate: day }; }
+  if (/\b(amanha)\b/.test(q)) { const day = addDays(referenceDate, 1); return { startDate: day, endDate: day }; }
+  if (/\b(proxima semana|semana que vem)\b/.test(q)) { const monday = addDays(startOfIsoWeek(referenceDate), 7); return { startDate: monday, endDate: addDays(monday, 6) }; }
+  const nextDays = /\b(?:proximos?|proximas?)\s+(\d{1,3})\s+dias?\b/.exec(q);
+  if (nextDays?.[1]) { const days = Math.min(Math.max(Number(nextDays[1]), 1), 366); return { startDate: referenceDate, endDate: addDays(referenceDate, days - 1) }; }
+  if (/\b(fim de semana|fds)\b/.test(q)) { const weekday = utcDate(referenceDate).getUTCDay(); const saturday = addDays(referenceDate, (6 - weekday + 7) % 7); return { startDate: saturday, endDate: addDays(saturday, 1) }; }
 
   if (/\b(mes passado|ultimo mes|mes anterior)\b/.test(q)) {
     const previous = new Date(Date.UTC(referenceYear, referenceMonth - 2, 1));
@@ -259,12 +267,15 @@ export function normalizeFinancialToolArguments(options: {
       options.name === "get_daily_spending_summary" &&
       /\b(costumo|media|padrao|normal|por dia)\b/.test(normalizedQuestion);
     const explicitRange = inferredRange(options.question, options.referenceDate);
+    const asksGenericRoutineSchedule = options.name === "get_routine_schedule" && /\b(agenda|calendario|compromissos?|eventos?|reunioes?|aulas?)\b/.test(normalizedQuestion);
     const range = dailyBaselineComparison
       ? recentDaysRange(options.referenceDate, 90)
       : explicitRange ??
         (asksHabitualDailySpending && !hasTemporalReference(options.question)
           ? recentDaysRange(options.referenceDate, 90)
-          : null);
+          : asksGenericRoutineSchedule && !hasTemporalReference(options.question)
+            ? { startDate: options.referenceDate, endDate: addDays(options.referenceDate, 7) }
+            : null);
     if (range) {
       if (asksWholeNamedMonth(options.question)) {
         parsed.startDate = range.startDate;

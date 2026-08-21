@@ -1,6 +1,6 @@
 # Ciclo 11 — Natural Financial Agent
 
-Status: **C11.1–C11.4 implementados; aguardando gate real da C11.4 para fechamento**.
+Status: **FECHADO em 20/08/2026. C11.1–C11.4 aprovados.**
 
 ## Objetivo
 
@@ -264,3 +264,20 @@ A implementação está completa até C11.4. O fechamento ocorre quando o gate r
 - grounding continua passando;
 - conversa deixa de depender de formulações rígidas;
 - contexto pode ser mantido de forma segura e controlada.
+
+
+## Fechamento real
+
+Gate executado em 20/08/2026:
+
+- 131/131 testes locais;
+- frontend typecheck/build aprovado;
+- benchmark real: 19/19 casos;
+- pass rate 100%;
+- grounding 100%;
+- tool accuracy 100%;
+- argument accuracy 100%;
+- context accuracy 100%;
+- limitation accuracy 100%.
+
+Dívida técnica carregada: latência média do benchmark real ~12,4 s, com buscas livres mais lentas.

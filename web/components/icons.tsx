@@ -36,3 +36,4 @@ export function MenuIcon(props: SVGProps<SVGSVGElement>) {
 export function CloseIcon(props: SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" {...props}><path d="m6 6 12 12M18 6 6 18"/></svg>;
 }
+export function CalendarIcon(props: SVGProps<SVGSVGElement>) { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M6 3v4M18 3v4M4 9h16"/><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 13h3M13 13h3M8 17h3"/></svg>; }
