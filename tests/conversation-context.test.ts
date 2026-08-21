@@ -30,6 +30,14 @@ describe("conversation context", () => {
     expect(routeFinancialTools(result).intent).toBe("spending");
   });
 
+  it("mantém intenção de saldo em follow-up informal com roxinho", () => {
+    const result = buildContextualRoutingQuestion("E no roxinho?", [
+      { role: "user", content: "Quanto eu tenho agora?" },
+      { role: "assistant", content: "Você tem..." },
+    ]);
+    expect(routeFinancialTools(result).intent).toBe("balances");
+  });
+
   it("limita e higieniza o histórico", () => {
     const history = Array.from({ length: 12 }, (_, index) => ({
       role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
@@ -39,4 +47,15 @@ describe("conversation context", () => {
     expect(safe).toHaveLength(4);
     expect(safe[0]?.content).toBe("mensagem 8");
   });
+  it("usa memória persistente como fallback quando não há histórico bruto", () => {
+    const result = buildContextualRoutingQuestion(
+      "E no roxinho?",
+      [],
+      "Perguntas anteriores desta conversa: Quanto eu tenho agora?",
+    );
+    expect(result).toContain("Contexto persistente");
+    expect(result).toContain("Quanto eu tenho agora?");
+    expect(routeFinancialTools(result).intent).toBe("balances");
+  });
+
 });

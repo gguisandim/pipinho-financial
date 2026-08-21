@@ -11,6 +11,7 @@ import type {
   TransactionRepositorySnapshot,
 } from "./transaction.repository.js";
 import type { Transaction } from "../domain/finance.js";
+import type { FinancialAccountSnapshot } from "./transaction.repository.js";
 
 export interface PluggyTransactionDataSource {
   fetchItem(itemId: string): Promise<PluggyItem>;
@@ -40,6 +41,7 @@ export class PluggyTransactionRepository implements TransactionRepository {
     query: TransactionRepositoryQuery = {},
   ): Promise<TransactionRepositorySnapshot> {
     const transactions: Transaction[] = [];
+    const accountSnapshots: FinancialAccountSnapshot[] = [];
     const seenIds = new Set<string>();
     let rawTransactions = 0;
     let skippedPending = 0;
@@ -55,6 +57,16 @@ export class PluggyTransactionRepository implements TransactionRepository {
       accounts += itemAccounts.length;
 
       for (const account of itemAccounts) {
+        accountSnapshots.push({
+          institution,
+          name: account.name,
+          marketingName: account.marketingName ?? null,
+          type: account.type,
+          subtype: account.subtype,
+          balance: account.balance,
+          currencyCode: account.currencyCode,
+          itemLastUpdatedAt: item.lastUpdatedAt ?? null,
+        });
         const collection = await this.dataClient.fetchAllTransactions(account.id, {
           dateFrom: query.dateFrom,
           dateTo: query.dateTo,
@@ -95,6 +107,7 @@ export class PluggyTransactionRepository implements TransactionRepository {
       source: this.source,
       fetchedAt: new Date().toISOString(),
       transactions,
+      accounts: accountSnapshots,
       diagnostics: {
         source: this.source,
         items: this.options.itemReferences.length,

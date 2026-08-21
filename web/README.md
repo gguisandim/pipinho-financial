@@ -29,7 +29,7 @@ Next.js / Vercel
          └── Groq
 ```
 
-O Supabase, nesta V1, é usado **somente para autenticação**. Não é necessário criar tabelas nem copiar transações financeiras para o Postgres.
+O Supabase é usado para **autenticação** e, desde a C11.3, para **memória de conversa**. O extrato bruto da Pluggy continua fora do Postgres.
 
 ## 1. Instalar
 
@@ -107,42 +107,55 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 PIPINHO_ALLOWED_EMAILS=
 FINANCIAL_API_URL=
 FINANCIAL_API_TOKEN=
+PIPINHO_CHAT_RETENTION_DAYS=365
 ```
 
 Marque `FINANCIAL_API_TOKEN` como variável sensível na Vercel.
 
 ## Sobre o Supabase
 
-Para a arquitetura atual, **não há migration SQL obrigatória**. O Supabase não armazena o extrato e não participa da lógica financeira.
-
-Quando o projeto virar multiusuário, aí vale adicionar algo como:
+A C11.3 adiciona duas tabelas com RLS:
 
 ```text
-profiles
-financial_connections (user_id → pluggy_item_id)
-chat_sessions
-chat_messages
-user_preferences
+pipinho_chat_sessions
+pipinho_chat_messages
 ```
 
-Antes disso, adicionar essas tabelas só aumentaria a superfície do sistema sem necessidade.
+Aplique `supabase/migrations/20260820031000_c11_3_chat_memory.sql` no **SQL Editor** do mesmo projeto Supabase usado pelo Auth. Cada linha fica vinculada ao `auth.uid()` e as policies impedem que um usuário leia a memória de outro.
 
-## Ciclo 11 — contexto conversacional curto
+A memória salva somente o conteúdo do chat e metadados compactos da resposta. O extrato bruto da Pluggy, IDs internos das contas e resultados completos das tools não são persistidos nessas tabelas.
 
-O endpoint do assistente agora aceita `conversationId` e até 10 mensagens anteriores:
+A retenção padrão é de 365 dias desde a última atualização da conversa:
 
-```json
-{
-  "question": "E mês passado?",
-  "conversationId": "...",
-  "history": [
-    { "role": "user", "content": "Quanto eu gastei este mês?" },
-    { "role": "assistant", "content": "..." }
-  ]
-}
+```env
+PIPINHO_CHAT_RETENTION_DAYS=365
 ```
 
-Isso permite follow-ups curtos sem transformar o histórico em fonte de verdade financeira. Números continuam precisando ser sustentados por tools executadas na resposta atual. A persistência das conversas no Supabase ainda não foi implementada; nesta etapa o contexto vive na sessão aberta do chat.
+Use `0` para não expirar automaticamente. A limpeza automática é oportunística: ocorre quando as rotas de conversa são usadas. O usuário também pode excluir uma conversa ou limpar todo o histórico pela interface.
+
+## Ciclo 11 — conversa natural e memória (C11.1 + C11.2 + C11.3)
+
+Na C11.3, o navegador deixou de ser a fonte do histórico. O fluxo agora é:
+
+```text
+Browser
+  ↓ question + conversationId
+Next BFF
+  ↓ valida sessão Supabase / RLS
+Supabase
+  ↓ últimas 10 mensagens
+Fastify Agent
+  ↓ tools + grounding
+Next BFF
+  ↓ salva pergunta e resposta
+Supabase
+```
+
+O backend ainda aceita o campo `history` por compatibilidade com clientes da C11.1/C11.2, mas o frontend C11.3 não o envia. A BFF recupera o contexto pelo Supabase e envia somente até 10 mensagens recentes ao agente.
+
+Além do histórico bruto, a sessão mantém uma `routing_memory` pequena contendo apenas as últimas perguntas do usuário. Ela funciona como fallback de contexto e **não é evidência financeira**. Valores continuam precisando vir de tools executadas no turno atual.
+
+As conversas podem ser retomadas em outro dispositivo desde que o usuário entre com a mesma conta Supabase.
 
 ## Ciclo 10 — filtros mensais
 

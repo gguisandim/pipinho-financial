@@ -150,11 +150,17 @@ describe("assistantRoutes - Cycle 11 conversation context", () => {
           { role: "user", content: "Quanto gastei este mês?" },
           { role: "assistant", content: "Você gastou R$ 100,00." },
         ],
+        memorySummary: "Perguntas anteriores desta conversa: Quanto eu gastei este mês?",
       },
     });
 
     expect(response.statusCode).toBe(200);
     expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
+      context: {
+        memorySummary: "Perguntas anteriores desta conversa: Quanto eu gastei este mês?",
+      },
+    });
     expect(response.json().conversation.contextualRouting).toBe(true);
   });
 });

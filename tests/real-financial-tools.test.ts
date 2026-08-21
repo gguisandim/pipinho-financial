@@ -29,6 +29,18 @@ const repository: TransactionRepository = {
       source: "pluggy",
       fetchedAt: "2026-08-17T12:00:00Z",
       transactions,
+      accounts: [
+        {
+          institution: "Nubank",
+          name: "Conta",
+          marketingName: null,
+          type: "BANK" as const,
+          subtype: "CHECKING_ACCOUNT",
+          balance: 321.45,
+          currencyCode: "BRL",
+          itemLastUpdatedAt: "2026-08-17T10:00:00Z",
+        },
+      ],
       diagnostics: {
         source: "pluggy",
         rawTransactions: 1,
@@ -72,5 +84,17 @@ describe("RealFinancialToolExecutor - Cycle 11 tools", () => {
       new RealFinancialDataService(repository),
     );
     await expect(executor.execute("search_transactions", "{}")).rejects.toThrow();
+  });
+
+  it("executa consulta de saldo das contas", async () => {
+    const executor = new RealFinancialToolExecutor(
+      new RealFinancialDataService(repository),
+    );
+    const result = (await executor.execute("get_account_balances", "{}")) as {
+      status: string;
+      totalBankBalance: number;
+    };
+    expect(result.status).toBe("ok");
+    expect(result.totalBankBalance).toBe(321.45);
   });
 });

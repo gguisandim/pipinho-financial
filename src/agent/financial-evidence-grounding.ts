@@ -273,6 +273,7 @@ export function evaluateFinancialEvidenceGrounding(
   ]);
   const institutionEvidence = hasAnyTool(names, [
     "get_spending_by_institution",
+    "get_account_balances",
     "get_category_transactions",
     "get_largest_expenses",
     "get_recent_transactions",

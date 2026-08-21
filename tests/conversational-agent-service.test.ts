@@ -92,6 +92,7 @@ describe("AgenticFinancialService conversational routing", () => {
     expect(result.toolCalls[0]?.arguments).toEqual({
       startDate: "2026-08-01",
       endDate: "2026-08-20",
+      institution: "Nubank",
     });
   });
 });

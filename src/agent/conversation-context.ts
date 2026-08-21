@@ -10,7 +10,8 @@ const FOLLOW_UP_PATTERNS = [
   /\b(e isso|isso|nisso|desse|dessa|dele|dela|tamb[eé]m)\b/i,
   /\b(m[eê]s passado|semana passada|ontem|hoje|agora)\b/i,
   /\b(aquele|aquela|aquilo)\b/i,
-  /\b(no nubank|no neon|no picpay|nesse banco|nessa institui[cç][aã]o)\b/i,
+  /\b(no nubank|no neon|no picpay|no roxinho|nesse banco|nessa institui[cç][aã]o|nessa conta|nesse cart[aã]o)\b/i,
+  /\b(l[aá]|ali|mesmo lugar|mesma conta)\b/i,
 ];
 
 function compact(value: string): string {
@@ -40,13 +41,23 @@ export function isLikelyConversationalFollowUp(question: string): boolean {
   return wordCount <= 12 && FOLLOW_UP_PATTERNS.some((pattern) => pattern.test(clean));
 }
 
+export function sanitizeConversationMemorySummary(
+  summary: string | undefined,
+  maxLength = 1400,
+): string | undefined {
+  if (!summary) return undefined;
+  const clean = compact(summary).slice(0, maxLength);
+  return clean || undefined;
+}
+
 export function buildContextualRoutingQuestion(
   question: string,
   history: ConversationHistoryMessage[] | undefined,
+  memorySummary?: string,
 ): string {
   const cleanQuestion = compact(question);
   const safeHistory = sanitizeConversationHistory(history);
-  if (!isLikelyConversationalFollowUp(cleanQuestion) || safeHistory.length === 0) {
+  if (!isLikelyConversationalFollowUp(cleanQuestion)) {
     return cleanQuestion;
   }
 
@@ -54,7 +65,14 @@ export function buildContextualRoutingQuestion(
     .reverse()
     .find((message) => message.role === "user");
 
-  if (!previousUser) return cleanQuestion;
+  if (previousUser) {
+    return `${cleanQuestion}\nContexto da pergunta anterior: ${previousUser.content}`;
+  }
 
-  return `${cleanQuestion}\nContexto da pergunta anterior: ${previousUser.content}`;
+  const safeMemorySummary = sanitizeConversationMemorySummary(memorySummary);
+  if (safeMemorySummary) {
+    return `${cleanQuestion}\nContexto persistente da conversa (somente para resolver referências, não é evidência financeira): ${safeMemorySummary}`;
+  }
+
+  return cleanQuestion;
 }

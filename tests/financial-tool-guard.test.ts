@@ -53,6 +53,37 @@ describe("financial tool grounding guard", () => {
     expect((result.result as { status?: string }).status).toBe("no_data");
   });
 
+  it("aceita a janela determinística de 90 dias para gasto diário habitual", () => {
+    const result = executeFinancialToolSafely({
+      question: "Quanto eu costumo gastar por dia?",
+      name: "get_daily_spending_summary",
+      rawArguments: JSON.stringify({
+        startDate: "2026-05-19",
+        endDate: "2026-08-16",
+      }),
+      referenceDate,
+      executor: () => ({ status: "ok" }),
+    });
+
+    expect(result.status).toBe("executed");
+  });
+
+  it("continua rejeitando janela arbitrária para gasto diário habitual", () => {
+    const result = executeFinancialToolSafely({
+      question: "Quanto eu costumo gastar por dia?",
+      name: "get_daily_spending_summary",
+      rawArguments: JSON.stringify({
+        startDate: "2026-01-01",
+        endDate: "2026-08-16",
+      }),
+      referenceDate,
+      executor: () => ({ status: "ok" }),
+    });
+
+    expect(result.status).toBe("rejected");
+    expect((result.result as { code?: string }).code).toBe("ungrounded_date");
+  });
+
   it("transforma argumentos fora do schema em feedback para o agente", () => {
     const result = executeFinancialToolSafely({
       question: "Quais dados estão disponíveis?",

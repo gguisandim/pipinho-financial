@@ -1,3 +1,9 @@
+const INSTITUTION_ALIASES: Array<{ pattern: RegExp; canonical: string }> = [
+  { pattern: /\b(nubank|nu bank|nubnak|nubnk|roxinho|no nu|do nu)\b/i, canonical: "Nubank" },
+  { pattern: /\b(picpay|pic pay|pic pey)\b/i, canonical: "PicPay" },
+  { pattern: /\b(neon|banco neon)\b/i, canonical: "Neon" },
+];
+
 const MONTHS: Record<string, number> = {
   janeiro: 1,
   fevereiro: 2,
@@ -65,6 +71,27 @@ function startOfIsoWeek(iso: string): string {
   return addDays(iso, delta);
 }
 
+function inferInstitution(question: string): string | null {
+  const normalized = normalizeText(question);
+  for (const alias of INSTITUTION_ALIASES) {
+    if (alias.pattern.test(normalized)) return alias.canonical;
+  }
+  return null;
+}
+
+function hasTemporalReference(question: string): boolean {
+  const q = normalizeText(question);
+  return (
+    namedMonths(q).length > 0 ||
+    explicitYears(q).length > 0 ||
+    /\b(hoje|ontem|anteontem|semana|mes|meses|ano|anos|trimestre|semestre|periodo|desde|ate|entre|ultimo|ultimos|ultima|ultimas)\b/.test(q)
+  );
+}
+
+function recentDaysRange(referenceDate: string, days: number): { startDate: string; endDate: string } {
+  return { startDate: addDays(referenceDate, -(days - 1)), endDate: referenceDate };
+}
+
 function explicitYears(question: string): number[] {
   return [...question.matchAll(/\b(20\d{2})\b/g)]
     .map((match) => Number(match[1]))
@@ -124,7 +151,7 @@ function relativeRange(question: string, referenceDate: string): {
     return { startDate: monthStart(year, month), endDate: monthEnd(year, month) };
   }
 
-  if (/\b(este mes|nesse mes|neste mes|mes atual)\b/.test(q)) {
+  if (/\b(este mes|esse mes|nesse mes|neste mes|mes atual)\b/.test(q)) {
     return {
       startDate: monthStart(referenceYear, referenceMonth),
       endDate: referenceDate,
@@ -137,7 +164,7 @@ function relativeRange(question: string, referenceDate: string): {
     return { startDate: previousMonday, endDate: addDays(previousMonday, 6) };
   }
 
-  if (/\b(esta semana|nessa semana|nesta semana|semana atual)\b/.test(q)) {
+  if (/\b(esta semana|essa semana|nessa semana|nesta semana|semana atual)\b/.test(q)) {
     return { startDate: startOfIsoWeek(referenceDate), endDate: referenceDate };
   }
 
@@ -214,10 +241,7 @@ export function normalizeFinancialToolArguments(options: {
     parsed.startDate === options.availablePeriod.start &&
     parsed.endDate === options.availablePeriod.end
   ) {
-    const q = normalizeText(options.question);
-    const hasTemporalQuestion =
-      namedMonths(q).length > 0 || explicitYears(q).length > 0 ||
-      /\b(hoje|ontem|anteontem|semana|mes|meses|ano|anos|trimestre|semestre|periodo|desde|ate|entre|ultimo|ultimos|ultima|ultimas)\b/.test(q);
+    const hasTemporalQuestion = hasTemporalReference(options.question);
     if (!hasTemporalQuestion) {
       delete parsed.startDate;
       delete parsed.endDate;
@@ -231,9 +255,16 @@ export function normalizeFinancialToolArguments(options: {
       /\b(gastei muito|gastei acima|gastei mais que o normal|fora do normal|acima do normal)\b/.test(
         normalizedQuestion,
       );
+    const asksHabitualDailySpending =
+      options.name === "get_daily_spending_summary" &&
+      /\b(costumo|media|padrao|normal|por dia)\b/.test(normalizedQuestion);
+    const explicitRange = inferredRange(options.question, options.referenceDate);
     const range = dailyBaselineComparison
-      ? null
-      : inferredRange(options.question, options.referenceDate);
+      ? recentDaysRange(options.referenceDate, 90)
+      : explicitRange ??
+        (asksHabitualDailySpending && !hasTemporalReference(options.question)
+          ? recentDaysRange(options.referenceDate, 90)
+          : null);
     if (range) {
       if (asksWholeNamedMonth(options.question)) {
         parsed.startDate = range.startDate;
@@ -259,6 +290,21 @@ export function normalizeFinancialToolArguments(options: {
     const asksFood = /\b(alimentacao|comida|alimentar)\b/.test(q);
     if (asksFood && parsed.category === undefined && parsed.categoryGroup === undefined) {
       parsed.categoryGroup = "food";
+    }
+  }
+
+  if (
+    options.name === "get_spending_by_institution" ||
+    options.name === "get_account_balances"
+  ) {
+    const institution = inferInstitution(options.question);
+    if (institution && parsed.institution === undefined) parsed.institution = institution;
+  }
+
+  if (options.name === "search_transactions") {
+    const q = normalizeText(options.question);
+    if (parsed.kind === undefined && /\b(gasto|gastos|compra|compras|despesa|despesas|paguei|custou)\b/.test(q)) {
+      parsed.kind = "spending";
     }
   }
 

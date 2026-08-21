@@ -161,6 +161,12 @@ export interface AssistantResponse {
     iterations: number;
     latencyMs: number;
   };
+  memory?: {
+    persisted: boolean;
+    retentionDays: number;
+    historyMessagesLoaded: number;
+    warning?: string;
+  };
 }
 
 export interface LargestExpensesResponse {

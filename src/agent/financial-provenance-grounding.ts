@@ -116,6 +116,10 @@ export function sanitizeFinancialProvenanceGrounding(
     get_largest_expenses: "a análise dos maiores gastos",
     get_spending_by_institution: "a comparação por instituição",
     get_monthly_financial_trend: "a análise de evolução mensal",
+    get_account_balances: "a consulta de saldos das contas",
+    get_recent_transactions: "a consulta de movimentações recentes",
+    search_transactions: "a busca de movimentações",
+    get_daily_spending_summary: "a análise de gasto diário",
     get_data_capabilities: "a verificação dos dados disponíveis",
   };
 

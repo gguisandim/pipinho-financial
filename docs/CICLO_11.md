@@ -1,6 +1,6 @@
 # Ciclo 11 — Natural Financial Agent
 
-Status: **iniciado — C11.1 implementado**.
+Status: **C11.1–C11.4 implementados; aguardando gate real da C11.4 para fechamento**.
 
 ## Objetivo
 
@@ -119,38 +119,144 @@ npm run qa:conversation:real
 
 O audit real cobre uma conversa com follow-ups e perguntas triviais/recentes.
 
-## Próximos passos do Ciclo 11
+## C11.2 — Resolução semântica mais ampla
 
-### C11.2 — Resolução semântica mais ampla
+Implementado:
 
-- aliases de merchants/instituições;
-- perguntas incompletas além dos padrões determinísticos;
-- busca textual mais robusta;
-- comparação de "normal" vs período específico;
-- reduzir respostas desnecessariamente formais.
+- saldo atual via `get_account_balances`, usando Accounts da Pluggy;
+- o total de saldo bancário agregado soma somente contas `BANK`;
+- contas `CREDIT` são listadas separadamente e nunca entram no total bancário agregado;
+- snapshots de conta não expõem `accountId` nem `itemId` ao LLM;
+- aliases de instituições:
+  - `roxinho` / `nu bank` → Nubank;
+  - `pic pay` → PicPay;
+  - `banco neon` → Neon;
+- roteamento distingue `quanto tenho no Nubank?` de `quanto gastei no Nubank?`;
+- busca textual tolerante a pequenos erros de digitação e aliases;
+- quando uma busca não encontra o merchant pedido, o backend pode retornar até 5 movimentações do mesmo período como **alternativas**, marcadas explicitamente como não-correspondências;
+- `Quanto eu costumo gastar por dia?` usa por padrão uma janela recente de 90 dias quando não há período explícito;
+- comparações como `Gastei muito ontem?` usam a mesma baseline recente para evitar comparar um dia com todo o histórico;
+- follow-ups reconhecem também referências como `no roxinho`, `nessa conta` e `lá`.
 
-### C11.3 — Memória de conversa
+### Tool `get_account_balances`
 
-- persistir sessões e mensagens no Supabase;
-- recuperar contexto entre dispositivos;
-- resumo de conversa para evitar histórico infinito;
-- política de retenção e exclusão.
+Retorna:
 
-### C11.4 — Evaluation harness conversacional
+- saldo bancário agregado quando as moedas são compatíveis;
+- contas BANK e CREDIT separadas;
+- saldo individual por conta;
+- instituição, nome, tipo/subtipo e moeda;
+- timestamp de atualização do Item quando disponível.
 
-Criar corpus maior com:
+Regra de segurança: **saldo de cartão não é saldo bancário**.
 
-- gírias;
-- erros de digitação;
-- follow-ups;
-- perguntas triviais;
-- referências como "aquele gasto";
-- instituições abreviadas;
-- perguntas impossíveis que devem declarar limitação.
+### Busca aproximada
+
+`search_transactions` agora classifica correspondências como `exact` ou `fuzzy`. O agente deve informar quando a correspondência for aproximada.
+
+Se não houver correspondência, `alternatives` serve apenas para ajudar o usuário a reconhecer uma movimentação do mesmo período. O agente não pode dizer que uma alternativa é o merchant pesquisado.
+
+## C11.3 — Memória persistente de conversa
+
+Implementado:
+
+- `pipinho_chat_sessions` e `pipinho_chat_messages` no Supabase;
+- RLS por `auth.uid()`;
+- retomada de conversas entre dispositivos;
+- o browser envia apenas `question` + `conversationId`;
+- o Next/BFF recupera no servidor até 10 mensagens recentes e só então chama o Fastify;
+- histórico enviado pelo navegador deixa de ser a fonte de confiança da memória;
+- `routing_memory` guarda somente até 5 perguntas recentes do usuário como resumo seguro de roteamento;
+- esse resumo nunca é tratado como evidência financeira;
+- retenção configurável por `PIPINHO_CHAT_RETENTION_DAYS` (365 dias por padrão, `0` desativa expiração);
+- limpeza oportunística de sessões expiradas;
+- exclusão de conversa individual;
+- exclusão de toda a memória do usuário;
+- o extrato bruto da Pluggy e resultados completos de tools continuam fora do Supabase.
+
+Migration:
+
+```text
+supabase/migrations/20260820031000_c11_3_chat_memory.sql
+```
+
+## C11.4 — Evaluation harness conversacional
+
+Implementado um corpus determinístico de **51 casos** cobrindo:
+
+- saudações e perguntas triviais sem uso desnecessário de tools;
+- gastos em linguagem informal (`quanto eu torrei esse mês?`);
+- saldo e aliases (`roxinho`, `nu`, `nubnak`, `pic pay`);
+- renda e poupança;
+- categorias e gastos por instituição;
+- transações recentes;
+- busca textual e erro de digitação (`Uberr`);
+- média diária com janela padrão de 90 dias;
+- maiores gastos;
+- perguntas não suportadas (`investimentos`, `limite`, `fatura`, `score de crédito`);
+- follow-ups com histórico curto;
+- follow-ups usando `routing_memory` persistente.
+
+O corpus local valida de forma determinística:
+
+- intent selecionada;
+- tools permitidas/obrigatórias;
+- tools proibidas;
+- herança de contexto;
+- aliases de instituição;
+- normalização de períodos relativos;
+- argumentos determinísticos das tools.
+
+Comando local:
+
+```bash
+npm run qa:conversation:benchmark
+```
+
+O audit real executa **19 casos representativos** contra Groq + Pluggy e gera:
+
+```text
+reports/conversation/latest.json
+reports/conversation/latest.md
+```
+
+Comando:
+
+```bash
+npm run qa:conversation:benchmark:real
+```
+
+Gate real para fechar o Ciclo 11:
+
+- pass rate >= 90%;
+- grounding = 100%;
+- tool accuracy >= 95%;
+- argument accuracy >= 95%;
+- context accuracy = 100%;
+- limitation accuracy = 100%.
+
+Também foram reforçados alguns pontos descobertos pelo corpus:
+
+- `esse mês` e `essa semana` passam a ser períodos relativos explícitos;
+- `salve pipinho` e `o que vc faz?` são conversa simples;
+- `roxinho`, `nu`, `nubnak` e `pic pay` são tratados como aliases;
+- `quanto eu tenho investido?` não é confundido com saldo bancário;
+- `score de crédito`, fatura e limite do cartão são encaminhados para capabilities;
+- `compra mais cara` tem precedência sobre a categoria genérica de compras;
+- `Uberr` é reconhecido como busca aproximada de transação.
+
+Atalhos de QA:
+
+```bash
+npm run qa:cycle11
+npm run qa:cycle11:full
+```
+
+`qa:cycle11` roda somente gates locais. `qa:cycle11:full` adiciona os audits reais e exige credenciais de provider/Pluggy.
 
 ## Critério para fechar o Ciclo 11
 
-O Ciclo 11 não está fechado em C11.1. Para encerrá-lo, o agente deve demonstrar em avaliação repetível que:
+A implementação está completa até C11.4. O fechamento ocorre quando o gate real da C11.4 passar de forma repetível e o agente demonstrar que:
 
 - follow-ups mantêm intenção e período corretamente;
 - perguntas triviais/recentes são respondidas quando os dados permitem;

@@ -17,10 +17,23 @@ export interface TransactionRepositoryDiagnostics {
   truncatedAccounts?: number;
 }
 
+export interface FinancialAccountSnapshot {
+  institution: string;
+  name: string;
+  marketingName: string | null;
+  type: "BANK" | "CREDIT";
+  subtype: string;
+  balance: number | null;
+  currencyCode: string;
+  itemLastUpdatedAt: string | null;
+}
+
 export interface TransactionRepositorySnapshot {
   source: string;
   fetchedAt: string;
   transactions: Transaction[];
+  /** Snapshot enxuto de Accounts para saldo atual; IDs sensíveis ficam fora do contrato. */
+  accounts?: FinancialAccountSnapshot[];
   diagnostics: TransactionRepositoryDiagnostics;
 }
 

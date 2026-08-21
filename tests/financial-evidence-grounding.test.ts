@@ -209,4 +209,18 @@ A análise geral permanece disponível.`;
     ).toBe(true);
   });
 
+  it("aceita saldo por instituição quando a consulta de contas foi executada", () => {
+    const result = evaluateFinancialEvidenceGrounding(
+      "No Nubank, o saldo bancário observado é R$ 1.200,00.",
+      [
+        tool("get_account_balances", {
+          status: "ok",
+          totalBankBalance: 1200,
+          accounts: [{ institution: "Nubank", type: "BANK", balance: 1200 }],
+        }),
+      ],
+    );
+    expect(result).toEqual({ passed: true, violations: [] });
+  });
+
 });

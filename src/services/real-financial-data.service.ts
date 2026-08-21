@@ -27,6 +27,64 @@ function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trigramSet(value: string): Set<string> {
+  const compact = `  ${normalizeSearchText(value)}  `;
+  const set = new Set<string>();
+  for (let index = 0; index <= compact.length - 3; index += 1) {
+    set.add(compact.slice(index, index + 3));
+  }
+  return set;
+}
+
+function trigramSimilarity(left: string, right: string): number {
+  const a = trigramSet(left);
+  const b = trigramSet(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const value of a) if (b.has(value)) intersection += 1;
+  return (2 * intersection) / (a.size + b.size);
+}
+
+function bestTextSimilarity(query: string, haystack: string): number {
+  const normalizedHaystack = normalizeSearchText(haystack);
+  const words = normalizedHaystack.split(/\s+/).filter(Boolean);
+  let best = trigramSimilarity(query, normalizedHaystack);
+  for (const word of words) best = Math.max(best, trigramSimilarity(query, word));
+  for (let index = 0; index < words.length - 1; index += 1) {
+    best = Math.max(best, trigramSimilarity(query, `${words[index]} ${words[index + 1]}`));
+  }
+  return best;
+}
+
+const SEARCH_ALIASES: Record<string, string[]> = {
+  ifood: ["ifood", "i food", "ifd"],
+  uber: ["uber", "uber trip", "uberbr"],
+  nubank: ["nubank", "nu bank", "roxinho"],
+  picpay: ["picpay", "pic pay"],
+  neon: ["neon", "banco neon"],
+};
+
+function searchVariants(query: string): string[] {
+  const normalized = normalizeSearchText(query);
+  const matched = Object.entries(SEARCH_ALIASES).find(([canonical, aliases]) =>
+    canonical === normalized || aliases.some((alias) => normalizeSearchText(alias) === normalized),
+  );
+  return [...new Set([
+    normalized,
+    ...(matched ? [normalizeSearchText(matched[0]), ...matched[1].map(normalizeSearchText)] : []),
+  ])].filter(Boolean);
+}
+
 export interface RealFinancialDataQuality {
   source: string;
   incomeQuality: "reliable" | "partial" | "insufficient";
@@ -513,6 +571,79 @@ export class RealFinancialDataService {
     };
   }
 
+  async getAccountBalances(options: { institution?: string } = {}) {
+    const snapshot = await this.snapshot();
+    const accounts = snapshot.accounts ?? [];
+    const institutionVariants = options.institution ? searchVariants(options.institution) : [];
+
+    const selected = accounts.filter((account) => {
+      if (institutionVariants.length === 0) return true;
+      const institution = normalizeSearchText(account.institution);
+      return institutionVariants.some((variant) =>
+        institution.includes(variant) ||
+        variant.includes(institution) ||
+        trigramSimilarity(institution, variant) >= 0.72,
+      );
+    });
+
+    if (selected.length === 0) {
+      return {
+        status: "no_data" as const,
+        source: snapshot.source,
+        institution: options.institution ?? null,
+        message: options.institution
+          ? `Não encontrei contas da instituição ${options.institution}.`
+          : "O snapshot atual não contém contas com saldo observado.",
+        availableInstitutions: [...new Set(accounts.map((account) => account.institution))],
+      };
+    }
+
+    const bankAccounts = selected.filter((account) => account.type === "BANK");
+    const creditAccounts = selected.filter((account) => account.type === "CREDIT");
+    const bankWithBalance = bankAccounts.filter((account) => typeof account.balance === "number");
+    const currencies = [...new Set(bankWithBalance.map((account) => account.currencyCode))];
+    const bankAccountsMissingBalanceCount = bankAccounts.length - bankWithBalance.length;
+    const canAggregateBankBalance =
+      currencies.length === 1 &&
+      bankWithBalance.length > 0 &&
+      bankAccountsMissingBalanceCount === 0;
+    const totalBankBalance = canAggregateBankBalance
+      ? round2(bankWithBalance.reduce((sum, account) => sum + (account.balance ?? 0), 0))
+      : null;
+
+    return {
+      status: "ok" as const,
+      source: snapshot.source,
+      fetchedAt: snapshot.fetchedAt,
+      institution: options.institution ?? null,
+      totalBankBalance,
+      currencyCode: currencies.length === 1 ? currencies[0]! : null,
+      bankAccountCount: bankAccounts.length,
+      bankAccountsWithBalanceCount: bankWithBalance.length,
+      bankAccountsMissingBalanceCount,
+      totalBankBalanceComplete: canAggregateBankBalance,
+      creditAccountCount: creditAccounts.length,
+      accounts: selected.map((account) => ({
+        institution: account.institution,
+        name: account.marketingName ?? account.name,
+        type: account.type,
+        subtype: account.subtype,
+        balance: account.balance,
+        currencyCode: account.currencyCode,
+        itemLastUpdatedAt: account.itemLastUpdatedAt,
+        includedInBankAggregate: account.type === "BANK" && typeof account.balance === "number",
+      })),
+      evidenceScope: {
+        accountBalancesComeFromPluggyAccounts: true,
+        totalIncludesOnlyBankAccounts: true,
+        totalRequiresBalanceForEveryBankAccount: true,
+        creditBalancesAreNeverAddedToAvailableMoney: true,
+        accountIdsSentToLlm: false,
+        itemIdsSentToLlm: false,
+      },
+    };
+  }
+
   async getRecentTransactions(
     options: DateRange & {
       limit?: number;
@@ -593,38 +724,70 @@ export class RealFinancialDataService {
     },
   ) {
     const { snapshot, transactions } = await this.selected(options);
-    const query = options.query
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
-    const terms = query.split(/\s+/).filter(Boolean);
+    const variants = searchVariants(options.query);
     const kind = options.kind ?? "all";
     const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
 
-    const matches = transactions
+    const candidates = transactions
       .filter((transaction) => {
-        if (kind === "spending" && classifyFinancialMovement(transaction) !== "spending") {
-          return false;
-        }
-        if (kind === "income" && !(transaction.type === "credit" && transaction.category === "income")) {
-          return false;
-        }
-
-        const haystack = [
+        if (kind === "spending" && classifyFinancialMovement(transaction) !== "spending") return false;
+        if (kind === "income" && !(transaction.type === "credit" && transaction.category === "income")) return false;
+        return true;
+      })
+      .map((transaction) => {
+        const haystack = normalizeSearchText([
           transaction.description,
           transaction.metadata?.institution ?? "",
           transaction.metadata?.accountName ?? "",
-        ]
-          .join(" ")
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase();
-        return terms.every((term) => haystack.includes(term));
+        ].join(" "));
+        let bestScore = 0;
+        let matchType: "exact" | "fuzzy" | null = null;
+        for (const variant of variants) {
+          if (!variant) continue;
+          if (haystack.includes(variant)) {
+            bestScore = Math.max(bestScore, 1);
+            matchType = "exact";
+            continue;
+          }
+          const tokens = variant.split(/\s+/).filter(Boolean);
+          const tokenCoverage = tokens.length
+            ? tokens.filter((token) => haystack.includes(token)).length / tokens.length
+            : 0;
+          const fuzzy = Math.max(tokenCoverage * 0.9, bestTextSimilarity(variant, haystack));
+          if (fuzzy > bestScore) {
+            bestScore = fuzzy;
+            if (fuzzy >= 0.55) matchType = "fuzzy";
+          }
+        }
+        return { transaction, score: bestScore, matchType };
       })
-      .sort((a, b) => b.date.localeCompare(a.date));
+      .filter((candidate) => candidate.matchType !== null && candidate.score >= 0.55)
+      .sort((a, b) => b.score - a.score || b.transaction.date.localeCompare(a.transaction.date));
 
-    if (matches.length === 0) {
+    const serialize = (transaction: Transaction) => ({
+      date: transaction.date,
+      description: transaction.description,
+      amount: transaction.amount,
+      type: transaction.type,
+      category: transaction.category,
+      institution: transaction.metadata?.institution ?? null,
+      accountName: transaction.metadata?.accountName ?? null,
+      movement: classifyFinancialMovement(transaction),
+    });
+
+    if (candidates.length === 0) {
+      const alternatives = transactions
+        .filter((transaction) =>
+          kind === "spending"
+            ? classifyFinancialMovement(transaction) === "spending"
+            : kind === "income"
+              ? transaction.type === "credit" && transaction.category === "income"
+              : true,
+        )
+        .sort((a, b) => b.amount - a.amount || b.date.localeCompare(a.date))
+        .slice(0, 5)
+        .map(serialize);
+
       return {
         status: "no_data" as const,
         source: snapshot.source,
@@ -633,30 +796,36 @@ export class RealFinancialDataService {
         requestedPeriod: options,
         availablePeriod: getAvailablePeriod(snapshot.transactions),
         message: `Não encontrei movimentações correspondentes a "${options.query}".`,
+        alternatives,
+        alternativeScope: alternatives.length > 0 ? "same_requested_period" : "none",
+        evidenceScope: {
+          fuzzySearchUsed: true,
+          alternativesAreNotQueryMatches: true,
+          alternativesAreBounded: true,
+          rawDatasetSentToLlm: false,
+        },
       };
     }
 
-    const selected = matches.slice(0, limit);
+    const selected = candidates.slice(0, limit);
     return {
       status: "ok" as const,
       source: snapshot.source,
       query: options.query,
       kind,
-      totalMatchCount: matches.length,
+      totalMatchCount: candidates.length,
       returnedTransactionCount: selected.length,
-      sampleTruncated: selected.length < matches.length,
-      transactions: selected.map((transaction) => ({
-        date: transaction.date,
-        description: transaction.description,
-        amount: transaction.amount,
-        type: transaction.type,
-        category: transaction.category,
-        institution: transaction.metadata?.institution ?? null,
-        accountName: transaction.metadata?.accountName ?? null,
-        movement: classifyFinancialMovement(transaction),
+      sampleTruncated: selected.length < candidates.length,
+      fuzzyMatchUsed: selected.some((candidate) => candidate.matchType === "fuzzy"),
+      transactions: selected.map((candidate) => ({
+        ...serialize(candidate.transaction),
+        matchType: candidate.matchType,
+        matchScore: round2(candidate.score * 100),
       })),
       evidenceScope: {
         searchFields: ["description", "institution", "account_name"],
+        aliasesSupported: Object.keys(SEARCH_ALIASES),
+        fuzzySearchUsed: true,
         sampleLimited: true,
         rawDatasetSentToLlm: false,
       },
@@ -768,11 +937,11 @@ export class RealFinancialDataService {
         "recent_transactions",
         "transaction_search",
         "daily_spending_summary",
+        "account_balances",
         "financial_charges_category",
         "savings_when_income_quality_allows",
       ],
       notIntegratedInCurrentAgent: [
-        "account_balance",
         "investments",
         "investment_transactions",
         "loans",

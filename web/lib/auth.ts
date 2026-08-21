@@ -31,7 +31,7 @@ export async function requireUser() {
 }
 
 export async function requireApiUser(): Promise<
-  | { ok: true; email: string | null }
+  | { ok: true; userId: string; email: string | null }
   | { ok: false; status: 401 | 403; message: string }
 > {
   const user = await getCurrentUser();
@@ -41,5 +41,5 @@ export async function requireApiUser(): Promise<
   if (!isEmailAllowed(user.email)) {
     return { ok: false, status: 403, message: "Conta não autorizada para este Pipinho." };
   }
-  return { ok: true, email: user.email ?? null };
+  return { ok: true, userId: user.id, email: user.email ?? null };
 }

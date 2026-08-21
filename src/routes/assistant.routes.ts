@@ -16,6 +16,7 @@ const requestSchema = z
     question: z.string().trim().min(1).max(500),
     conversationId: z.string().trim().min(8).max(100).optional(),
     history: z.array(historyMessageSchema).max(10).optional().default([]),
+    memorySummary: z.string().trim().min(1).max(1500).optional(),
   })
   .strict();
 
@@ -50,6 +51,7 @@ export async function assistantRoutes(
       const result = await agent.answer(parsed.data.question, {
         conversationId: parsed.data.conversationId,
         history: parsed.data.history,
+        memorySummary: parsed.data.memorySummary,
       });
       return {
         status: "ok" as const,

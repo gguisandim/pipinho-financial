@@ -45,8 +45,14 @@ describe("financial tool router", () => {
     expect(route.toolNames).toEqual(["get_spending_by_category"]);
   });
 
-  it("reserva capabilities para dimensão não integrada", () => {
+  it("roteia saldo bancário para a tool de contas", () => {
     const route = routeFinancialTools("Qual é meu saldo bancário atual?");
+    expect(route.intent).toBe("balances");
+    expect(route.toolNames).toEqual(["get_account_balances"]);
+  });
+
+  it("reserva capabilities para dimensão ainda não integrada", () => {
+    const route = routeFinancialTools("Qual é o meu limite do cartão?");
     expect(route.intent).toBe("capabilities");
     expect(route.toolNames).toEqual(["get_data_capabilities"]);
   });
@@ -77,8 +83,21 @@ describe("financial tool router - Cycle 11 natural language", () => {
     expect(route.toolNames).toEqual(["get_daily_spending_summary"]);
   });
 
-  it("trata quanto tenho como dimensão de saldo ainda não integrada", () => {
+  it("trata quanto tenho como consulta de saldo integrada", () => {
     const route = routeFinancialTools("quanto eu tenho agora?");
-    expect(route.intent).toBe("capabilities");
+    expect(route.intent).toBe("balances");
+    expect(route.toolNames).toEqual(["get_account_balances"]);
+  });
+
+  it("entende roxinho como contexto de saldo", () => {
+    const route = routeFinancialTools("quanto tem no roxinho?");
+    expect(route.intent).toBe("balances");
+    expect(route.toolNames).toEqual(["get_account_balances"]);
+  });
+
+  it("não confunde gasto no Nubank com saldo do Nubank", () => {
+    const route = routeFinancialTools("quanto eu gastei no Nubank este mês?");
+    expect(route.intent).toBe("institutions");
+    expect(route.toolNames).toEqual(["get_spending_by_institution"]);
   });
 });

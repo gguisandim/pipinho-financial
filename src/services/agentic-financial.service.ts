@@ -31,6 +31,7 @@ import {
 import {
   buildContextualRoutingQuestion,
   sanitizeConversationHistory,
+  sanitizeConversationMemorySummary,
   type ConversationHistoryMessage,
 } from "../agent/conversation-context.js";
 import type { ToolDefinition } from "../llm/tool-calling/tool-calling.types.js";
@@ -114,13 +115,15 @@ export class AgenticFinancialService {
     context: {
       history?: ConversationHistoryMessage[];
       conversationId?: string;
+      memorySummary?: string;
     } = {},
   ) {
     const maxIterations = this.options.maxIterations ?? env.AGENT_MAX_ITERATIONS;
     const maxToolCalls = this.options.maxToolCalls ?? env.AGENT_MAX_TOOL_CALLS;
     const referenceDate = this.options.referenceDate ?? defaultReferenceDate();
     const history = sanitizeConversationHistory(context.history, 10);
-    const routingQuestion = buildContextualRoutingQuestion(question, history);
+    const memorySummary = sanitizeConversationMemorySummary(context.memorySummary);
+    const routingQuestion = buildContextualRoutingQuestion(question, history, memorySummary);
     const groundingQuestion = questionHasTemporalConstraint(question)
       ? question
       : routingQuestion;
@@ -136,6 +139,14 @@ export class AgenticFinancialService {
         role: "system",
         content: systemPromptBuilder(referenceDate),
       },
+      ...(memorySummary && history.length === 0 && routingQuestion !== question
+        ? [
+            {
+              role: "system" as const,
+              content: `Memória persistente para resolução de contexto. Ela contém apenas perguntas anteriores do usuário e não é evidência financeira: ${memorySummary}`,
+            },
+          ]
+        : []),
       ...history.map<ToolCallingMessage>((message) =>
         message.role === "assistant"
           ? { role: "assistant", content: message.content }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "../src/domain/finance.js";
 import type {
+  FinancialAccountSnapshot,
   TransactionRepository,
   TransactionRepositorySnapshot,
 } from "../src/repositories/transaction.repository.js";
@@ -17,12 +18,16 @@ function tx(partial: Partial<Transaction> & Pick<Transaction, "id" | "amount" | 
 
 class MemoryRepository implements TransactionRepository {
   readonly source = "pluggy";
-  constructor(private readonly transactions: Transaction[]) {}
+  constructor(
+    private readonly transactions: Transaction[],
+    private readonly accounts: FinancialAccountSnapshot[] = [],
+  ) {}
   async listTransactions(): Promise<TransactionRepositorySnapshot> {
     return {
       source: this.source,
       fetchedAt: "2026-08-17T12:00:00.000Z",
       transactions: this.transactions,
+      accounts: this.accounts,
       diagnostics: {
         source: this.source,
         rawTransactions: this.transactions.length,
@@ -97,6 +102,37 @@ function service() {
           status: "posted",
         },
       }),
+    ], [
+      {
+        institution: "Nubank",
+        name: "Conta",
+        marketingName: "Conta Nubank",
+        type: "BANK",
+        subtype: "CHECKING_ACCOUNT",
+        balance: 1200,
+        currencyCode: "BRL",
+        itemLastUpdatedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        institution: "Nubank",
+        name: "Cartão",
+        marketingName: "Ultravioleta",
+        type: "CREDIT",
+        subtype: "CREDIT_CARD",
+        balance: 500,
+        currencyCode: "BRL",
+        itemLastUpdatedAt: "2026-08-17T10:00:00.000Z",
+      },
+      {
+        institution: "PicPay",
+        name: "Carteira",
+        marketingName: null,
+        type: "BANK",
+        subtype: "DIGITAL_ACCOUNT",
+        balance: 200,
+        currencyCode: "BRL",
+        itemLastUpdatedAt: "2026-08-17T10:00:00.000Z",
+      },
     ]),
   );
 }
@@ -220,5 +256,39 @@ describe("RealFinancialDataService - Cycle 11 conversational tools", () => {
     expect(result.totalSpending).toBe(150);
     expect(result.averagePerCalendarDay).toBe(150);
     expect(result.averagePerSpendingDay).toBe(150);
+  });
+
+  it("retorna saldo bancário observado somando apenas contas BANK", async () => {
+    const result = await service().getAccountBalances();
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.totalBankBalance).toBe(1400);
+    expect(result.bankAccountCount).toBe(2);
+    expect(result.creditAccountCount).toBe(1);
+    expect(result.accounts.find((item) => item.type === "CREDIT")?.includedInBankAggregate).toBe(false);
+  });
+
+  it("resolve roxinho como Nubank ao filtrar saldo", async () => {
+    const result = await service().getAccountBalances({ institution: "roxinho" });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.totalBankBalance).toBe(1200);
+    expect(result.accounts.every((item) => item.institution === "Nubank")).toBe(true);
+  });
+
+  it("faz busca aproximada para erro simples de digitação", async () => {
+    const result = await service().searchTransactions({ query: "uberr", kind: "spending" });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.transactions[0]?.description).toBe("Uber");
+    expect(result.fuzzyMatchUsed).toBe(true);
+  });
+
+  it("oferece alternativas do mesmo período sem tratá-las como match", async () => {
+    const result = await service().searchTransactions({ query: "99app", kind: "spending" });
+    expect(result.status).toBe("no_data");
+    if (result.status !== "no_data") return;
+    expect(result.alternatives.length).toBeGreaterThan(0);
+    expect(result.evidenceScope.alternativesAreNotQueryMatches).toBe(true);
   });
 });

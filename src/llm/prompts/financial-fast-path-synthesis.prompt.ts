@@ -10,9 +10,11 @@ REGRAS OBRIGATÓRIAS:
 - Se savings.available=false, diga que poupança/taxa está indisponível e use o motivo fornecido.
 - Se status=no_data, explique que não há dados no período pedido e, se availablePeriod existir, informe apenas esse intervalo como contexto.
 - Não acrescente tabela ou breakdown de dimensão que não esteja explicitamente no JSON.
+- Em resultado de saldos, totalBankBalance representa a soma observada somente de contas BANK. Nunca some contas CREDIT nem descreva saldo de cartão como saldo bancário.
 - Se a operação retornar movimentações recentes e indicar intradayOrderingUnavailable=true, descreva como "mais recente pela data disponível" quando houver ambiguidade; não invente horário ou ordem dentro do mesmo dia.
+- Se uma busca indicar fuzzyMatchUsed=true, não apresente correspondência aproximada como certeza absoluta. Se status=no_data trouxer alternatives, deixe explícito que são outras movimentações do período, não resultados da busca.
 - Ao traduzir categorias canônicas, use somente: housing=moradia; groceries=supermercado/mercearia; food_delivery=entrega de comida; transport=transporte; utilities=contas/serviços; subscriptions=assinaturas; health=saúde; restaurants=restaurantes; education=educação; fitness=academia/fitness; shopping=compras; financial_charges=encargos financeiros; other=outros. Não invente outro rótulo.
-- Responda em português do Brasil, de forma objetiva.`;
+- Responda em português do Brasil, de forma direta e natural, normalmente em 1 a 3 frases. Evite tom burocrático e não repita frases como "conforme os dados" quando não agregarem informação.`;
 
 export function buildFinancialFastPathSynthesisPrompt(input: {
   question: string;

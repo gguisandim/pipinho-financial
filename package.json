@@ -37,8 +37,12 @@
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web run build",
     "web:typecheck": "npm --prefix web run typecheck",
-    "qa:conversation": "vitest run tests/conversational-agent-service.test.ts tests/conversation-context.test.ts tests/financial-tool-router.test.ts tests/financial-tool-argument-normalizer.test.ts tests/real-financial-data-service.test.ts tests/real-financial-tools.test.ts tests/assistant-routes.test.ts",
-    "qa:conversation:real": "tsx src/scripts/audit-conversation.ts"
+    "qa:conversation": "vitest run tests/conversational-agent-service.test.ts tests/conversation-context.test.ts tests/conversation-benchmark.test.ts tests/financial-tool-router.test.ts tests/financial-tool-argument-normalizer.test.ts tests/real-financial-data-service.test.ts tests/real-financial-tools.test.ts tests/pluggy-transaction-repository.test.ts tests/financial-evidence-grounding.test.ts tests/financial-tool-guard.test.ts tests/assistant-routes.test.ts",
+    "qa:conversation:real": "tsx src/scripts/audit-conversation.ts",
+    "qa:conversation:benchmark": "vitest run tests/conversation-benchmark.test.ts",
+    "qa:conversation:benchmark:real": "tsx src/scripts/audit-conversation-benchmark.ts",
+    "qa:cycle11": "npm run typecheck && npm run qa:conversation && npm run web:typecheck && npm run web:build",
+    "qa:cycle11:full": "npm run qa:cycle11 && npm run qa:conversation:real && npm run qa:conversation:benchmark:real"
   },
   "dependencies": {
     "dotenv": "17.4.2",

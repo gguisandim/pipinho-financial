@@ -9,6 +9,7 @@ export interface FinancialToolRoutingDecision {
     | "categories"
     | "category_composition"
     | "institutions"
+    | "balances"
     | "largest_expenses"
     | "recent_transactions"
     | "transaction_search"
@@ -39,8 +40,8 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
   const q = normalized(question);
 
   if (
-    has(q, /^(oi|ola|opa|e ai|bom dia|boa tarde|boa noite|valeu|obrigad[oa]|tmj)[!.? ]*$/) ||
-    has(q, /\b(quem e voce|o que voce faz|o que consegue fazer|como voce funciona|me ajuda|ajuda ai)\b/)
+    has(q, /^(oi|ola|opa|e ai|salve(?: pipinho)?|fala(?: pipinho)?|bom dia|boa tarde|boa noite|valeu|obrigad[oa]|tmj)[!.? ]*$/) ||
+    has(q, /\b(quem e voce|o que (?:voce|vc) faz|o que consegue fazer|como voce funciona|me ajuda|ajuda ai)\b/)
   ) {
     return { intent: "conversation", toolNames: [] };
   }
@@ -58,8 +59,8 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
 
   if (
     has(q, /\b(procura|procurar|busca|buscar|encontra|encontrar|ache|achar)\b/) ||
-    has(q, /\b(aquele|aquela)\b.*\b(gasto|compra|pagamento|transacao|uber|ifood)\b/) ||
-    has(q, /\b(uber|ifood|i food)\b.*\b(quanto|valor|gasto|paguei|custou|foi)\b/)
+    has(q, /\b(aquele|aquela)\b.*\b(gasto|compra|pagamento|transacao|uberr?|ifood)\b/) ||
+    has(q, /\b(uberr?|ifood|i food)\b.*\b(quanto|valor|gasto|paguei|custou|foi)\b/)
   ) {
     return {
       intent: "transaction_search",
@@ -81,6 +82,25 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
     };
   }
 
+  // Domínios explicitamente não integrados precisam vencer expressões genéricas
+  // como "quanto tenho", para não confundir investimento/limite com saldo bancário.
+  if (has(q, /\b(investimentos?|investido|acoes?|cripto|bitcoin|emprestimos?|financiamentos?|fatura(?: atual| futura)?|limite(?: do)? cartao|limite do roxinho|score de credito|credit score)\b/)) {
+    return {
+      intent: "capabilities",
+      toolNames: ["get_data_capabilities"],
+    };
+  }
+
+  if (
+    has(q, /\b(saldo(?: atual| bancario)?|quanto eu tenho|quanto tenho|quanto tem|dinheiro disponivel|dinheiro na conta|tenho quanto|disponivel na conta)\b/) ||
+    has(q, /\b(saldo|dinheiro|tenho|tem)\b.*\b(nubank|nu bank|nubnak|nubnk|roxinho|no nu|do nu|neon|picpay|pic pay|pic pey)\b/)
+  ) {
+    return {
+      intent: "balances",
+      toolNames: ["get_account_balances"],
+    };
+  }
+
   if (has(q, /\b(taxa de poupanca|poupanca|economizei|economia|savings(?: rate)?)\b/)) {
     return {
       intent: "savings",
@@ -88,8 +108,15 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
     };
   }
 
-  if (has(q, /\b(renda|receita|salario|ganhei|entradas de renda)\b/)) {
+  if (has(q, /\b(renda|receita|salario|ganhei|entrou|recebi|entradas? de renda|quanto entrou)\b/)) {
     return { intent: "income", toolNames: ["get_income"] };
+  }
+
+  if (has(q, /\b(maiores? gastos?|maiores? despesas?|top gastos?|compra mais cara|compras? mais caras?|maiores? compras?)\b/)) {
+    return {
+      intent: "largest_expenses",
+      toolNames: ["get_largest_expenses"],
+    };
   }
 
   if (
@@ -102,24 +129,17 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
     };
   }
 
-  if (has(q, /\b(categoria|categorias|onde gasto|tipo de gasto|alimentacao|comida|mercado|supermercado|restaurante|delivery|transporte|moradia|assinaturas?|saude|educacao|academia|fitness|compras?|encargos financeiros)\b/)) {
+  if (has(q, /\b(categoria|categorias|onde gasto|onde eu (?:to|estou) gastando|onde (?:to|estou) gastando|tipo de gasto|alimentacao|comida|mercado|supermercado|restaurante|delivery|transporte|moradia|assinaturas?|saude|educacao|academia|fitness|compras?|encargos financeiros)\b/)) {
     return {
       intent: "categories",
       toolNames: ["get_spending_by_category"],
     };
   }
 
-  if (has(q, /\b(instituicao|instituicoes|banco|nubank|neon|picpay)\b/)) {
+  if (has(q, /\b(instituicao|instituicoes|banco|nubank|nu bank|nubnak|nubnk|roxinho|no nu|do nu|neon|picpay|pic pay|pic pey)\b/)) {
     return {
       intent: "institutions",
       toolNames: ["get_spending_by_institution"],
-    };
-  }
-
-  if (has(q, /\b(maiores? gastos?|maiores? despesas?|top gastos?|compras? mais caras?|maiores? compras?)\b/)) {
-    return {
-      intent: "largest_expenses",
-      toolNames: ["get_largest_expenses"],
     };
   }
 
@@ -140,19 +160,13 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
     };
   }
 
-  if (has(q, /\b(quanto gastei|quanto eu gastei|total de gastos?|gasto total|spending|despesas? totais?|gastos?)\b/)) {
+  if (has(q, /\b(quanto gastei|quanto eu gastei|quanto eu torrei|quanto torrei|total de gastos?|gasto total|spending|despesas? totais?|despesa total|gastos?)\b/)) {
     return {
       intent: "spending",
       toolNames: ["get_spending_summary"],
     };
   }
 
-  if (has(q, /\b(saldo atual|saldo bancario|quanto eu tenho|quanto tenho|investimentos?|emprestimos?|financiamentos?|fatura(?: atual| futura)?|limite do cartao)\b/)) {
-    return {
-      intent: "capabilities",
-      toolNames: ["get_data_capabilities"],
-    };
-  }
 
   return {
     intent: "general",
@@ -164,6 +178,7 @@ export function routeFinancialTools(question: string): FinancialToolRoutingDecis
       "get_recent_transactions",
       "search_transactions",
       "get_daily_spending_summary",
+      "get_account_balances",
       "get_data_capabilities",
     ],
   };

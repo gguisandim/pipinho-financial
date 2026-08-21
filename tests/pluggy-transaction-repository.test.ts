@@ -98,6 +98,10 @@ describe("PluggyTransactionRepository", () => {
 
     expect(snapshot.source).toBe("pluggy");
     expect(snapshot.transactions).toHaveLength(2);
+    expect(snapshot.accounts).toEqual([
+      expect.objectContaining({ institution: "Nubank", name: "Conta", type: "BANK", balance: 100 }),
+      expect.objectContaining({ institution: "Nubank", name: "Cartão", type: "CREDIT", balance: 100 }),
+    ]);
     expect(snapshot.transactions.map((tx) => tx.id)).toEqual([
       "pluggy:bank-posted",
       "pluggy:card-posted",

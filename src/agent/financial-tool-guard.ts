@@ -96,15 +96,52 @@ function yearFromIsoDate(date: string): string | null {
   return match?.[1] ?? null;
 }
 
+function isoFromDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoFromDate(date);
+}
+
+function isPolicyGroundedDerivedRange(
+  question: string,
+  name: string,
+  args: Record<string, unknown>,
+  referenceDate: string,
+): boolean {
+  if (name !== "get_daily_spending_summary") return false;
+
+  const normalized = question
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const asksHabitualDailySpending =
+    /\b(costumo|media|padrao|normal|por dia)\b/.test(normalized);
+  if (!asksHabitualDailySpending) return false;
+
+  return (
+    args.startDate === addDays(referenceDate, -89) &&
+    args.endDate === referenceDate
+  );
+}
+
 function validateDateGrounding(
   question: string,
+  name: string,
   args: Record<string, unknown>,
   referenceDate: string,
 ): ToolExecutionRejected | null {
   const dateArgs = getDateArguments(args);
   if (dateArgs.length === 0) return null;
 
-  if (!questionHasTemporalConstraint(question)) {
+  if (
+    !questionHasTemporalConstraint(question) &&
+    !isPolicyGroundedDerivedRange(question, name, args, referenceDate)
+  ) {
     return {
       status: "rejected",
       result: {
@@ -182,6 +219,7 @@ export function executeFinancialToolSafely(options: {
 
   const groundingError = validateDateGrounding(
     options.question,
+    options.name,
     parsed.value,
     options.referenceDate,
   );
@@ -231,6 +269,7 @@ export async function executeFinancialToolSafelyAsync(options: {
 
   const groundingError = validateDateGrounding(
     options.question,
+    options.name,
     parsed.value,
     options.referenceDate,
   );

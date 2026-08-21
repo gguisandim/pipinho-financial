@@ -71,6 +71,12 @@ const institutionSchema = z
   })
   .strict();
 
+const accountBalancesSchema = z
+  .object({
+    institution: z.string().min(1).max(100).optional(),
+  })
+  .strict();
+
 const transactionKindSchema = z.enum(["all", "spending", "income"]);
 
 const recentTransactionsSchema = z
@@ -101,6 +107,7 @@ export type RealFinancialToolName =
   | "get_largest_expenses"
   | "get_spending_by_institution"
   | "get_monthly_financial_trend"
+  | "get_account_balances"
   | "get_recent_transactions"
   | "search_transactions"
   | "get_daily_spending_summary"
@@ -332,6 +339,24 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "get_account_balances",
+      description:
+        "Retorna saldos atuais das Accounts Pluggy sem expor accountId/itemId. Soma somente contas BANK no saldo bancário agregado; contas CREDIT são listadas separadamente e nunca entram no total disponível. institution é opcional.",
+      parameters: {
+        type: "object",
+        properties: {
+          institution: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description: "Instituição específica, por exemplo Nubank, Neon ou PicPay. Omita para todas.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_recent_transactions",
       description:
         "Retorna as movimentações mais recentes usando a data disponível no dataset. Use para perguntas como último gasto, última compra, últimas movimentações ou o que comprei recentemente. Para gasto/compra use kind=spending; para renda identificada use kind=income.",
@@ -403,7 +428,7 @@ export const realFinancialToolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_data_capabilities",
       description:
-        "Informa campos, análises, limitações e qualidade do dataset Pluggy atual. Use apenas para dimensões ainda não integradas, como saldo bancário atual, investimentos, empréstimos ou projeção de fatura. NÃO use para spending, renda, poupança/savings, categorias, instituições ou tendência mensal, pois existem tools específicas. Não aceita argumentos.",
+        "Informa campos, análises, limitações e qualidade do dataset Pluggy atual. Use apenas para dimensões ainda não integradas, como investimentos, empréstimos ou projeção de fatura. NÃO use para saldo bancário, spending, renda, poupança/savings, categorias, instituições ou tendência mensal, pois existem tools específicas. Não aceita argumentos.",
       parameters: {
         type: "object",
         properties: {},
@@ -486,6 +511,11 @@ export class RealFinancialToolExecutor {
       case "get_monthly_financial_trend": {
         const args = monthlyTrendSchema.parse(raw);
         return this.data.getMonthlySeries(args);
+      }
+
+      case "get_account_balances": {
+        const args = accountBalancesSchema.parse(raw);
+        return this.data.getAccountBalances(args);
       }
 
       case "get_recent_transactions": {

@@ -150,12 +150,48 @@ describe("normalizeFinancialToolArguments - linguagem temporal natural", () => {
 });
 
 
-it("não limita a baseline diária a ontem em pergunta comparativa", () => {
+it("usa janela recente de 90 dias para baseline diária comparativa", () => {
   const raw = normalizeFinancialToolArguments({
     question: "Gastei muito ontem?",
     name: "get_daily_spending_summary",
     rawArguments: "{}",
     referenceDate,
   });
-  expect(JSON.parse(raw)).toEqual({});
+  expect(JSON.parse(raw)).toEqual({
+    startDate: "2026-05-21",
+    endDate: "2026-08-18",
+  });
+});
+
+it("usa 90 dias para pergunta habitual sem período explícito", () => {
+  const raw = normalizeFinancialToolArguments({
+    question: "Quanto eu costumo gastar por dia?",
+    name: "get_daily_spending_summary",
+    rawArguments: "{}",
+    referenceDate,
+  });
+  expect(JSON.parse(raw)).toEqual({
+    startDate: "2026-05-21",
+    endDate: "2026-08-18",
+  });
+});
+
+it("resolve roxinho para Nubank em consulta de saldo", () => {
+  const raw = normalizeFinancialToolArguments({
+    question: "Quanto tem no roxinho?",
+    name: "get_account_balances",
+    rawArguments: "{}",
+    referenceDate,
+  });
+  expect(JSON.parse(raw)).toEqual({ institution: "Nubank" });
+});
+
+it("resolve Pic Pay para PicPay em consulta por instituição", () => {
+  const raw = normalizeFinancialToolArguments({
+    question: "Quanto gastei no Pic Pay?",
+    name: "get_spending_by_institution",
+    rawArguments: "{}",
+    referenceDate,
+  });
+  expect(JSON.parse(raw)).toEqual({ institution: "PicPay" });
 });
